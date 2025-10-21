@@ -41,6 +41,7 @@ async def webhook(request: Request):
         # Log the incoming request
         logger.info(f"Webhook received: {len(body)} bytes")
         logger.info(f"Headers: {dict(request.headers)}")
+        print(request)
 
         # If there's a body, try to parse it as JSON
         if body:
