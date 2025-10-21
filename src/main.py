@@ -1,14 +1,14 @@
 import json
 import time
+import logging
 from datetime import datetime
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from .logging_config import setup_vercel_logging, log_request, log_response, log_webhook
-
-# Setup Vercel-optimized logging
-logger = setup_vercel_logging("INFO")
+# Simple logging setup for Vercel
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Notion Teste")
 
@@ -18,8 +18,9 @@ class LoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         start_time = time.time()
 
-        # Log incoming request
-        log_request(logger, request.method, request.url, request.headers)
+        # Log incoming request - using both print and logger for Vercel compatibility
+        print(f"🚀 REQUEST: {request.method} {request.url}")
+        logger.info(f"Request: {request.method} {request.url}")
 
         # Process request
         response = await call_next(request)
@@ -28,7 +29,8 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         response_time_ms = (time.time() - start_time) * 1000
 
         # Log response
-        log_response(logger, response.status_code, response_time_ms)
+        print(f"✅ RESPONSE: {response.status_code} ({response_time_ms:.2f}ms)")
+        logger.info(f"Response: {response.status_code} ({response_time_ms:.2f}ms)")
 
         return response
 
@@ -39,6 +41,7 @@ app.add_middleware(LoggingMiddleware)
 
 @app.get("/")
 async def root():
+    print("🏥 HEALTH CHECK: Root endpoint accessed")
     logger.info("Health check endpoint accessed")
     return {
         "status": "online",
@@ -49,6 +52,7 @@ async def root():
 
 @app.get("/health")
 async def health_check():
+    print("🏥 HEALTH CHECK: Detailed health check requested")
     logger.info("Detailed health check requested")
     return {
         "status": "healthy",
@@ -64,22 +68,28 @@ async def webhook(request: Request):
         # Get the raw body
         body = await request.body()
 
+        print(f"📨 WEBHOOK: Received {len(body)} bytes")
+        logger.info(f"Webhook received: {len(body)} bytes")
+
         # Parse payload for logging
         payload_keys = []
         if body:
             try:
                 payload = json.loads(body.decode("utf-8"))
                 payload_keys = list(payload.keys()) if isinstance(payload, dict) else []
-            except json.JSONDecodeError:
-                payload_keys = ["invalid_json"]
+                print(f"📨 WEBHOOK: Payload keys: {payload_keys}")
+                logger.info(f"Webhook payload keys: {payload_keys}")
+            except json.JSONDecodeError as e:
+                print(f"❌ WEBHOOK: JSON decode error: {str(e)}")
+                logger.error(f"JSON decode error: {str(e)}")
+                raise HTTPException(status_code=400, detail=f"Invalid JSON: {str(e)}")
 
-        # Log webhook with structured data
-        log_webhook(
-            logger,
-            len(body),
-            request.headers.get("content-type", "unknown"),
-            request.headers.get("user-agent", "unknown"),
-            payload_keys,
+        # Log headers
+        content_type = request.headers.get("content-type", "unknown")
+        user_agent = request.headers.get("user-agent", "unknown")
+        print(f"📨 WEBHOOK: Content-Type: {content_type}, User-Agent: {user_agent}")
+        logger.info(
+            f"Webhook headers - Content-Type: {content_type}, User-Agent: {user_agent}"
         )
 
         # Return success response
@@ -90,31 +100,15 @@ async def webhook(request: Request):
             "payload_size": len(body) if body else 0,
         }
 
-        logger.info(
-            "Webhook processed successfully",
-            extra={"event_type": "webhook_success", "response_status": 200},
-        )
+        print("✅ WEBHOOK: Processed successfully, returning response")
+        logger.info("Webhook processed successfully")
 
         return JSONResponse(status_code=200, content=response_data)
 
-    except json.JSONDecodeError as e:
-        logger.error(
-            "JSON decode error",
-            extra={
-                "event_type": "webhook_error",
-                "error_type": "json_decode",
-                "error_message": str(e),
-            },
-        )
-        raise HTTPException(status_code=400, detail=f"Invalid JSON: {str(e)}")
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
     except Exception as e:
-        logger.error(
-            "Webhook processing error",
-            extra={
-                "event_type": "webhook_error",
-                "error_type": "general",
-                "error_message": str(e),
-            },
-            exc_info=True,
-        )
+        print(f"❌ WEBHOOK: Processing error: {str(e)}")
+        logger.error(f"Webhook processing error: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
