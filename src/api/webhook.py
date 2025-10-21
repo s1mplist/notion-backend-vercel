@@ -8,4 +8,5 @@ app = FastAPI()
 
 @app.post("/webhook")
 async def notion_webhook(request: Request):
+    logger.info("Request: ", request)
     return JSONResponse(content={"teste": "ok"}, status=200)
