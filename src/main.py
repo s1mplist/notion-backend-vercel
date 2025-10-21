@@ -1,5 +1,5 @@
 import logging
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 
 app = FastAPI(title="Notion Automation API")
 logger = logging.getLogger(__name__)
@@ -11,6 +11,11 @@ async def root():
 
 
 @app.post("/api/webhook")
-async def webhook(payload):
-    logger.info(payload)
-    return {"payload": payload}
+async def webhook(request: Request):
+    try:
+        payload = await request.json()
+        logger.info(f"Received webhook payload: {payload}")
+        return {"status": "success", "payload": payload}
+    except Exception as e:
+        logger.error(f"Error processing webhook: {str(e)}")
+        return {"status": "error", "message": str(e)}
