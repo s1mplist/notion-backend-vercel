@@ -1,8 +1,8 @@
-from fastapi import FastAPI
+import uvicorn
 
-app = FastAPI()
-
-
-@app.get("/")
-async def read_root():
-    return {"message": "Hello World"}
+if __name__ == "__main__":
+    uvicorn.run(
+        "app.app:app",  # Caminho completo até o objeto 'app'
+        port=8000,  # Porta padrão
+        reload=True,  # Habilita recarregamento automático ao editar código
+    )
