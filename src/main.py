@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 
 # Configure structured logging for Vercel
 logging.basicConfig(level=logging.DEBUG)
@@ -31,6 +31,6 @@ async def health_check():
 
 
 @app.post("/api/webhook")
-async def webhook(request: Request):
+async def webhook(request):
     logger.INFO(request)
     return {"status": "OK"}
