@@ -10,6 +10,7 @@ async def root():
     return {"status": "online", "message": "API rodando com sucesso!"}
 
 
+@app.post("/api/webhook")
 async def webhook(payload):
     logger.info(payload)
     return {"payload": payload}
