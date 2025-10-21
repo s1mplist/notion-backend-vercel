@@ -1,8 +1,8 @@
 import logging
+import json
 from datetime import datetime
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
-from src.models.notion.webhook import BaseWebHook
 
 # Configure structured logging for Vercel
 logging.basicConfig(level=logging.DEBUG)
@@ -43,32 +43,8 @@ async def webhook(request: Request):
         logger.info(f"Headers: {dict(request.headers)}")
         print(request)
 
-        # If there's a body, try to parse it as JSON
-        if body:
-            try:
-                import json
-
-                payload = json.loads(body.decode("utf-8"))
-                logger.info(f"Webhook payload: {payload}")
-
-                # Try to validate against Notion webhook model
-                try:
-                    webhook_data = BaseWebHook(**payload)
-                    logger.info(
-                        f"Valid Notion webhook: {webhook_data.type} for entity {webhook_data.entity}"
-                    )
-                except Exception as validation_error:
-                    logger.warning(
-                        f"Payload doesn't match Notion webhook format: {validation_error}"
-                    )
-                    # Continue processing even if it doesn't match the model
-
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse JSON: {e}")
-                raise HTTPException(status_code=400, detail="Invalid JSON payload")
-        else:
-            logger.info("Empty webhook payload")
-            payload = None
+        payload = json.loads(body.decode("utf-8"))
+        logger.info(f"Webhook payload: {payload}")
 
         # Return success response
         return JSONResponse(
@@ -78,6 +54,7 @@ async def webhook(request: Request):
                 "message": "Webhook received successfully",
                 "timestamp": datetime.now().isoformat(),
                 "payload_size": len(body) if body else 0,
+                "body": payload,
             },
         )
 
