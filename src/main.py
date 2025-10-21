@@ -1,8 +1,16 @@
-import uvicorn
+import logging
+from fastapi import FastAPI
 
-if __name__ == "__main__":
-    uvicorn.run(
-        "app.app:app",  # Caminho completo até o objeto 'app'
-        port=8000,  # Porta padrão
-        reload=True,  # Habilita recarregamento automático ao editar código
-    )
+app = FastAPI(title="Notion Automation API")
+logger = logging.getLogger(__name__)
+
+
+@app.get("/")
+async def root():
+    return {"status": "online", "message": "API rodando com sucesso!"}
+
+
+@app.post("/api/webhook")
+async def webhook(payload):
+    logger.info(payload)
+    return {"payload": payload}
