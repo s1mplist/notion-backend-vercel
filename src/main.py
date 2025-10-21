@@ -69,6 +69,7 @@ async def webhook(request: Request):
         body = await request.body()
 
         print(f"📨 WEBHOOK: Received {len(body)} bytes")
+        logger.info(body)
         logger.info(f"Webhook received: {len(body)} bytes")
 
         # Parse payload for logging
