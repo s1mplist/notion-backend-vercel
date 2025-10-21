@@ -5,7 +5,7 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from logging_config import setup_vercel_logging, log_request, log_response, log_webhook
+from .logging_config import setup_vercel_logging, log_request, log_response, log_webhook
 
 # Setup Vercel-optimized logging
 logger = setup_vercel_logging("INFO")
