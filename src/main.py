@@ -69,6 +69,7 @@ async def webhook(request: Request):
         body = await request.body()
 
         print(f"📨 WEBHOOK: Received {len(body)} bytes")
+        print(f"{body}")
         logger.info(body)
         logger.info(f"Webhook received: {len(body)} bytes")
 
