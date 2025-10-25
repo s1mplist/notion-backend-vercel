@@ -1,18 +1,32 @@
 import logging
 import os
 import inspect
+from datetime import datetime
 from notion_client import AsyncClient
 
 from src.models import WebhookRequest
+from src.models.generation import GenerationMetadata
 from src.services.notion_mapper import NotionDataMapper
-from src.services.pdf_generator_playwright import PDFGeneratorPlaywright as PDFGenerator
+from src.services.pdf_generator_weasyprint import (
+    PDFGeneratorWeasyPrint as PDFGenerator,
+)
+from src.services.notion_writer import NotionWriter
+from src.services.vercel_blob_uploader import VercelBlobUploader
 
 from dotenv import load_dotenv
 
 # Load env vars
 load_dotenv("environments/prod/.env")
 
+
+logging.basicConfig(
+    level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
+file_handler = logging.FileHandler("./logs/notion_webhook.log")
+
+logger.setLevel(logging.DEBUG)
+logger.addHandler(file_handler)
 
 
 async def process_webhook_data(webhook_data: WebhookRequest) -> dict:
@@ -28,6 +42,15 @@ async def process_webhook_data(webhook_data: WebhookRequest) -> dict:
     try:
         logger.info(f"Processing webhook event: {webhook_data.type}")
 
+        # Initialize generation metadata
+        gen_meta = GenerationMetadata(
+            webhook_id=webhook_data.id,
+            webhook_timestamp=webhook_data.timestamp,
+            entity_id=webhook_data.entity.get("id"),
+            generation_started_at=datetime.utcnow(),
+            generation_status="started",
+        )
+
         # Get data from Notion
         page_id = webhook_data.entity.get("id")
         if not isinstance(page_id, str) or not page_id:
@@ -38,11 +61,34 @@ async def process_webhook_data(webhook_data: WebhookRequest) -> dict:
             raise ValueError("Invalid or missing Notion page ID in Notion data.")
         plots_data = await get_plots_data(notion_id)
 
+        # Try to resolve the database title (farm name)
+        database_id = (
+            (webhook_data.data or {}).get("parent", {}).get("id")
+            if isinstance(webhook_data.data, dict)
+            else None
+        ) or notion_data.get("parent", {}).get("database_id")
+        farm_name = ""
+        if isinstance(database_id, str) and database_id:
+            try:
+                farm_name = await get_database_title(database_id)
+                logger.debug(
+                    f"Resolved farm name from database '{database_id}': {farm_name}"
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Could not resolve database title for {database_id}: {e}"
+                )
+
         # Map data to report model
         mapper = NotionDataMapper()
         report_data = mapper.map_to_report(notion_data, plots_data)
+        # Inject farm name if resolved
+        if farm_name:
+            try:
+                report_data.farm_name = farm_name
+            except Exception:
+                pass
 
-        # Generate and save PDF
         pdf_generator = PDFGenerator()
         output_dir = os.path.join(os.path.dirname(__file__), "..", "reports")
         os.makedirs(output_dir, exist_ok=True)
@@ -54,14 +100,82 @@ async def process_webhook_data(webhook_data: WebhookRequest) -> dict:
         else:
             pdf_path = maybe_coro
 
+        # Mark metadata as completed
+        gen_meta.generation_completed_at = datetime.utcnow()
+        gen_meta.generation_status = "success"
+
+        # Try to register the generation in a Notion database and attach PDF
+        output_db_id = os.getenv("NOTION_OUTPUT_DATABASE_ID", "").strip()
+        notion_record_page_id = None
+        pdf_public_url = None
+
+        # Upload PDF to Vercel Blob and get public URL
+        try:
+            pdf_public_url = await VercelBlobUploader.upload_file(pdf_path)
+            if pdf_public_url:
+                logger.info(f"Uploaded PDF to Vercel Blob: {pdf_public_url}")
+        except Exception:
+            logger.exception("Vercel Blob upload failed; continuing without PDF URL")
+
+        if output_db_id:
+            try:
+                # Title for the record
+                title = f"Relatório - {report_data.farm_name or 'Fazenda'} - {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+                # Create record in Notion
+                notion_record_page_id = await NotionWriter.create_generation_record(
+                    database_id=output_db_id,
+                    title=title,
+                    payload=webhook_data.dict(),
+                    metadata=gen_meta,
+                    pdf_url=pdf_public_url,
+                    additional_fields={
+                        "Farm": getattr(report_data, "farm_name", "") or "",
+                        "Fazenda": getattr(report_data, "farm_name", "") or "",
+                        "Report Month": getattr(report_data, "report_month", "") or "",
+                    },
+                )
+                logger.info(
+                    f"Created Notion generation record: {notion_record_page_id} (db: {output_db_id})"
+                )
+            except Exception as e:
+                logger.exception(f"Failed to create Notion generation record: {e}")
+
         return {
             "status": "success",
             "message": "Report generated successfully",
             "pdf_path": pdf_path,
+            "notion_record_page_id": notion_record_page_id,
+            "pdf_public_url": pdf_public_url,
         }
 
     except Exception as e:
         logger.error(f"Error processing webhook data: {str(e)}", exc_info=True)
+        try:
+            # Best-effort: write failed metadata if configured
+            output_db_id = os.getenv("NOTION_OUTPUT_DATABASE_ID", "").strip()
+            if output_db_id:
+                gen_meta = GenerationMetadata(
+                    webhook_id=webhook_data.id,
+                    webhook_timestamp=webhook_data.timestamp,
+                    entity_id=webhook_data.entity.get("id"),
+                    generation_started_at=None,
+                    generation_completed_at=datetime.utcnow(),
+                    generation_status="error",
+                    generation_error=str(e),
+                )
+                title = (
+                    f"Relatório - ERRO - {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+                )
+                await NotionWriter.create_generation_record(
+                    database_id=output_db_id,
+                    title=title,
+                    payload=webhook_data.dict(),
+                    metadata=gen_meta,
+                    pdf_url=None,
+                )
+        except Exception:
+            # Don't mask original error
+            pass
         raise
 
 
@@ -82,6 +196,26 @@ async def get_notion_page(page_id: str) -> dict:
 
     except Exception as e:
         logger.error(f"Error getting Notion page {page_id}: {str(e)}")
+        raise
+
+
+async def get_database_title(database_id: str) -> str:
+    """Retrieve the Notion database title (plain text) given its ID.
+
+    The Notion API returns the database title as a list of rich_text objects in the
+    top-level "title" field. We join their plain_text to form the final title.
+    """
+    try:
+        async with AsyncClient(auth=os.environ["NOTION_TOKEN"]) as notion:
+            db = await notion.databases.retrieve(database_id=database_id)
+            parts = db.get("title", []) or []
+            title = "".join(
+                (p.get("plain_text") or p.get("text", {}).get("content", ""))
+                for p in parts
+            ).strip()
+            return title
+    except Exception as e:
+        logger.error(f"Error getting Notion database {database_id}: {str(e)}")
         raise
 
 

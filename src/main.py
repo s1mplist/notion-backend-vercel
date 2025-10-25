@@ -55,6 +55,7 @@ async def webhook(request: Request):
         body = await request.body()
         payload = json.loads(body.decode("utf-8"))
         webhook_model = WebhookRequest(**payload)
+        logger.info(f"Received webhook: {webhook_model.id}")
 
         async def _bg_process(model: WebhookRequest):
             try:
