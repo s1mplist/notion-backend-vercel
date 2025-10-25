@@ -1,0 +1,238 @@
+/* Variáveis CSS */
+:root {
+    --primary-color: #0f4c45;
+    --secondary-color: #0fca62;
+    --text-color: #333;
+    --border-color: #e0e0e0;
+    --background-light: #f5f5f5;
+    --spacing-unit: 1rem;
+}
+
+/* Fontes */
+@font-face {
+    font-family: 'Inter';
+    src: url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+}
+
+/* Reset e estilos base */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter', system-ui, sans-serif;
+    line-height: 1.6;
+    color: var(--text-color);
+    background-color: white;
+    padding: var(--spacing-unit);
+}
+
+/* Configuração de página */
+@page {
+    size: A4;
+    margin: 2cm;
+    
+    @top-center {
+        content: 'Relatório Técnico';
+        font-family: 'Inter', system-ui, sans-serif;
+        font-size: 9pt;
+        color: var(--text-color);
+    }
+    
+    @bottom-center {
+        content: 'Página ' counter(page);
+        font-family: 'Inter', system-ui, sans-serif;
+        font-size: 9pt;
+        color: var(--text-color);
+    }
+}
+
+/* Cabeçalho */
+.header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: calc(var(--spacing-unit) * 3);
+}
+
+.header img {
+    max-width: 200px;
+    margin-bottom: var(--spacing-unit);
+}
+
+/* Grid de informações */
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--spacing-unit);
+    margin-bottom: calc(var(--spacing-unit) * 2);
+}
+
+.info-item {
+    background: var(--background-light);
+    padding: var(--spacing-unit);
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.info-label {
+    font-weight: 600;
+    color: var(--primary-color);
+    font-size: 0.9em;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+
+.info-value {
+    color: var(--secondary-color);
+    font-weight: 500;
+    font-size: 1.1em;
+}
+
+/* Seções */
+.section {
+    margin-bottom: calc(var(--spacing-unit) * 3);
+}
+
+.section-title {
+    color: var(--primary-color);
+    font-size: 1.5em;
+    font-weight: 600;
+    margin-bottom: var(--spacing-unit);
+    padding-bottom: calc(var(--spacing-unit) / 2);
+    border-bottom: 2px solid var(--primary-color);
+}
+
+/* Talhões */
+.talhao {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    padding: calc(var(--spacing-unit) * 1.5);
+    margin-bottom: calc(var(--spacing-unit) * 2);
+    border: 1px solid var(--border-color);
+    page-break-inside: avoid;
+}
+
+.talhao-info {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--spacing-unit);
+    background: var(--background-light);
+    padding: var(--spacing-unit);
+    border-radius: 8px;
+    margin-bottom: var(--spacing-unit);
+}
+
+/* Galeria de imagens */
+.image-gallery {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-unit);
+    margin: var(--spacing-unit) 0;
+    page-break-inside: avoid;
+}
+
+.gallery-image {
+    width: 100%;
+    height: 300px;
+    object-fit: cover;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Avaliação */
+.avaliacao {
+    background: var(--background-light);
+    padding: var(--spacing-unit);
+    border-radius: 8px;
+    margin-top: var(--spacing-unit);
+}
+
+/* Cronograma */
+.schedule {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    overflow: hidden;
+    margin: var(--spacing-unit) 0;
+}
+
+.schedule-item {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: var(--spacing-unit);
+    padding: calc(var(--spacing-unit) / 2) var(--spacing-unit);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.schedule-date {
+    font-weight: 500;
+    color: var(--primary-color);
+}
+
+/* Footer */
+.footer {
+    text-align: center;
+    margin-top: calc(var(--spacing-unit) * 3);
+    padding-top: calc(var(--spacing-unit) * 2);
+    border-top: 1px solid var(--border-color);
+    color: var(--text-color);
+}
+
+.footer img {
+    max-width: 150px;
+    margin-bottom: var(--spacing-unit);
+}
+
+/* Utilitários */
+.text-center { text-align: center; }
+.mb-1 { margin-bottom: var(--spacing-unit); }
+.mb-2 { margin-bottom: calc(var(--spacing-unit) * 2); }
+.mt-1 { margin-top: var(--spacing-unit); }
+.mt-2 { margin-top: calc(var(--spacing-unit) * 2); }
+
+/* Cards e elementos visuais */
+.card {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    padding: var(--spacing-unit);
+    margin-bottom: var(--spacing-unit);
+}
+
+.badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    font-weight: 500;
+}
+
+.badge-primary {
+    background: var(--primary-color);
+    color: white;
+}
+
+.badge-secondary {
+    background: var(--secondary-color);
+    color: white;
+}
+
+/* Responsividade para impressão */
+@media print {
+    body {
+        padding: 0;
+    }
+    
+    .page-break {
+        page-break-before: always;
+    }
+    
+    .no-print {
+        display: none;
+    }
+}
