@@ -1,0 +1,39 @@
+# Exclude development, tests, and generated artifacts from the deployment upload
+
+# VCS and editor
+.git/
+.github/
+.vscode/
+.idea/
+.DS_Store
+
+# Python caches
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+*.log
+
+# Notebooks and related caches
+notebooks/
+**/.ipynb_checkpoints/
+*.ipynb
+
+# Local env and secrets (handled by Vercel env vars)
+environments/
+*.env
+
+# Test and scripts
+reports/
+scripts/
+tests/
+
+# Other large or non-runtime assets
+*.bak
+*.tmp
+
+# Node/Playwright caches if they appear
+node_modules/
+.cache/
+.playwright/
+ms-playwright/
