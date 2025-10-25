@@ -1,11 +1,12 @@
-# Exclude development, tests, and generated artifacts from the deployment upload
-
 # VCS and editor
 .git/
 .github/
 .vscode/
 .idea/
 .DS_Store
+
+# Vercel internal
+.vercel/
 
 # Python caches
 **/__pycache__/
@@ -22,13 +23,17 @@ notebooks/
 # Local env and secrets (handled by Vercel env vars)
 environments/
 *.env
+.env*
 
 # Test and scripts
 reports/
-scripts/
 tests/
+*.md
+LOGGING_GUIDE.md
+VERCEL_DEPLOY.md
 
-# Other large or non-runtime assets
+# Logs and temporary outputs
+logs/
 *.bak
 *.tmp
 
@@ -37,3 +42,7 @@ node_modules/
 .cache/
 .playwright/
 ms-playwright/
+
+# Development files not required at runtime
+pyproject.toml
+requirements-dev.txt
