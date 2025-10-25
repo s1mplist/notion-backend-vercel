@@ -20,14 +20,18 @@
         <div class="info-value mt-1">{{plot.crop}} - {{plot.variety}}</div>
     </div>
 
-    <div class="image-gallery">
-        {% for image in plot.images %}
-        <img src="{{image.url}}" alt="{{image.description}}" class="gallery-image" loading="lazy" decoding="async" style="max-width:100%;height:auto;display:block;" onerror="this.style.display='none'">
-        {% endfor %}
-    </div>
+    <div class="images-and-assessment-group">
+        <div class="image-gallery">
+            {% for image in plot.images %}
+            <div class="gallery-image-wrapper">
+                <img src="{{image.url}}" alt="{{image.description}}" class="gallery-image" loading="lazy" decoding="async" style="max-width:100%;height:auto;display:block;" onerror="this.style.display='none'">
+            </div>
+            {% endfor %}
+        </div>
 
-    <div class="avaliacao">
-        <div class="info-label mb-1">Avaliação</div>
-        <div>{{plot.assessment}}</div>
+        <div class="avaliacao">
+            <div class="info-label mb-1">Avaliação</div>
+            <div>{{plot.assessment}}</div>
+        </div>
     </div>
 </div>

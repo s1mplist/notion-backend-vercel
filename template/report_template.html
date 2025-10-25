@@ -4,79 +4,83 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Relatório Técnico - {{farm_name}}</title>
+    <title>Relatório Técnico - {{ farm_name }}</title>
     <link rel="stylesheet" href="styles.css">
-</head>
+    <meta name="color-scheme" content="light">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <style>
+        /* Pequenos ajustes específicos para WeasyPrint, sem alterar o styles.css original */
+        .header img { max-width: 100%; height: auto; }
+    </style>
+    </head>
 
 <body>
     <!-- Cabeçalho -->
     <header class="header">
-        <img src="./images/img_visita_tecnica.jpeg" alt="Logo" width="160" loading="eager" decoding="async">
+        <img src="./images/img_visita_tecnica.jpeg" alt="Banner" loading="eager" decoding="async">
         <div class="info-grid">
             <div class="info-item">
                 <div class="info-label">Consultor Técnico</div>
-                <div class="info-value">{{consultant_name}}</div>
+                <div class="info-value">{{ consultant_name }}</div>
             </div>
             <div class="info-item">
                 <div class="info-label">Fazenda</div>
-                <div class="info-value">{{farm_name}}</div>
+                <div class="info-value">{{ farm_name }}</div>
             </div>
             <div class="info-item">
                 <div class="info-label">Mês</div>
-                <div class="info-value">{{report_month}}</div>
+                <div class="info-value">{{ report_month }}</div>
             </div>
             <div class="info-item">
                 <div class="info-label">Proprietário</div>
-                <div class="info-value">{{owner_name}}</div>
+                <div class="info-value">{{ owner_name }}</div>
             </div>
             <div class="info-item">
-            <!-- Template de Talhão com loop (reusa plot_template.html) -->
-            {% for plot in plots %}
-                {% include 'plot_template.html' %}
+                <div class="info-label">Cidade</div>
+                <div class="info-value">{{ farm_city }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Safra</div>
+                <div class="info-value">{{ harvest_period }}</div>
+            </div>
+        </div>
+    </header>
 
-                {% if not loop.last %}
-                <div class="page-break"></div>
-                {% endif %}
-            {% endfor %}
+    <!-- Sumário Executivo -->
+    <section class="section executive-summary">
+        <div class="summary-card">
+            <div class="summary-item">
+                <span class="summary-icon">📋</span>
+                <div class="summary-content">
+                    <div class="summary-label">Informações Gerais</div>
+                    <div class="summary-text">{{ general_info }}</div>
+                </div>
+            </div>
+            
+            <div class="summary-item">
+                <span class="summary-icon">📅</span>
+                <div class="summary-content">
+                    <div class="summary-label">Próxima visita técnica:</div>
+                    <div class="summary-text">{{ next_visit_date }}</div>
+                </div>
+            </div>
+            
+            <div class="summary-item">
+                <span class="summary-icon">⏱️</span>
+                <div class="summary-content">
+                    <div class="summary-label">Cronograma de Operações</div>
+                    <div class="summary-text">({{ current_visit_date }} à {{ next_visit_date }})</div>
+                    <div class="summary-schedule">{{ operations_schedule }}</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Talhões -->
     {% for plot in plots %}
-    <div class="talhao">
-        <div class="talhao-info">
-            <div>
-                <div class="info-label">Talhão</div>
-                <div class="info-value">{{plot.id}}</div>
-            </div>
-            <div>
-                <div class="info-label">Área</div>
-                <div class="info-value">{{plot.area}}ha</div>
-            </div>
-            <div>
-                <div class="info-label">Estádio Fenológico</div>
-                <div class="info-value badge badge-secondary">{{plot.growth_stage}}</div>
-            </div>
-        </div>
-
-        <div class="card mb-1">
-            <div class="info-label">Cultura e Variedade</div>
-            <div class="info-value mt-1">{{plot.crop}} - {{plot.variety}}</div>
-        </div>
-
-        <div class="image-gallery">
-            {% for image in plot.images %}
-            <img src="{{image.url}}" alt="{{image.description}}" class="gallery-image" loading="lazy" decoding="async"
-                style="max-width:100%;height:auto;display:block;" onerror="this.style.display='none'">
-            {% endfor %}
-        </div>
-
-        <div class="avaliacao">
-            <div class="info-label mb-1">Avaliação</div>
-            <div>{{plot.assessment}}</div>
-        </div>
-    </div>
-
-    {% if not loop.last %}
-    <div class="page-break"></div>
-    {% endif %}
+        {% include 'plot_template.html' %}
     {% endfor %}
+
 </body>
 
 </html>
