@@ -6,8 +6,8 @@ from datetime import datetime
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 
-from models import WebhookRequest, GenerationMetadata
-from get_data import process_webhook_data
+from .models import WebhookRequest, GenerationMetadata
+from .get_data import process_webhook_data
 
 try:
     if sys.platform == "win32":

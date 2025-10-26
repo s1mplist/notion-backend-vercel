@@ -5,7 +5,7 @@ from datetime import datetime, date
 import uuid as _uuid
 from notion_client import AsyncClient
 
-from models.generation import GenerationMetadata
+from ..models.generation import GenerationMetadata
 
 
 class NotionWriter:

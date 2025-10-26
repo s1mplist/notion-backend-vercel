@@ -5,10 +5,10 @@ This module provides the main function to process webhook data from Notion.
 The heavy lifting is now done by dedicated service classes.
 """
 
-from models import WebhookRequest
-from models.generation import GenerationMetadata
-from services.webhook_processor import WebhookProcessor
-from utils.logging_config import setup_logging, get_logger
+from .models import WebhookRequest
+from .models.generation import GenerationMetadata
+from .services.webhook_processor import WebhookProcessor
+from .utils.logging_config import setup_logging, get_logger
 from dotenv import load_dotenv
 
 # Load environment variables
