@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 from typing import Optional
-from models.report import Report
+from ..models.report import Report
 
 logger = logging.getLogger(__name__)
 

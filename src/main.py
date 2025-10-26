@@ -94,3 +94,104 @@ async def webhook(request: Request):
     except Exception as e:
         logger.error(f"Webhook processing error: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/debug/html")
+async def debug_html(page_id: str = None):
+    """
+    Debug endpoint to test HTML generation.
+    Usage: GET /debug/html?page_id=NOTION_PAGE_ID
+    """
+    try:
+        if not page_id:
+            raise HTTPException(status_code=400, detail="page_id parameter is required")
+
+        # Import services
+        from .services.notion_service import NotionService
+        from .services.plot_data_extractor import PlotDataExtractor
+        from .services.notion_mapper import NotionDataMapper
+        from .services.html_renderer import HTMLRenderer
+
+        # Initialize services
+        notion_service = NotionService()
+        plot_extractor = PlotDataExtractor()
+        data_mapper = NotionDataMapper()
+        html_renderer = HTMLRenderer()
+
+        logger.info(f"DEBUG HTML: Starting HTML generation for page_id: {page_id}")
+
+        # Get data from Notion
+        notion_data = await notion_service.get_page(page_id)
+        plots_data = await plot_extractor.extract_plots_data(page_id)
+
+        # Map data to report model
+        report_data = data_mapper.map_to_report(notion_data, plots_data)
+
+        # Generate HTML
+        html_content = await html_renderer.render_report_html(report_data)
+
+        # Print HTML to terminal (debug output)
+        print("\n" + "=" * 80)
+        print("DEBUG HTML OUTPUT")
+        print("=" * 80)
+        print(html_content)
+        print("=" * 80)
+        print(f"HTML Length: {len(html_content)} characters")
+        print("=" * 80 + "\n")
+
+        return {
+            "status": "success",
+            "message": "HTML generated successfully - check terminal output",
+            "html_length": len(html_content),
+            "farm_name": getattr(report_data, "farm_name", ""),
+            "plots_count": len(getattr(report_data, "plots", [])),
+        }
+
+    except Exception as e:
+        logger.error(f"Debug HTML error: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Debug error: {str(e)}")
+
+
+@app.get("/debug/html-preview")
+async def debug_html_preview(page_id: str = None):
+    """
+    Debug endpoint to preview HTML in browser.
+    Usage: GET /debug/html-preview?page_id=NOTION_PAGE_ID
+    """
+    try:
+        if not page_id:
+            return "<h1>Error: page_id parameter is required</h1><p>Usage: /debug/html-preview?page_id=YOUR_NOTION_PAGE_ID</p>"
+
+        # Import services
+        from .services.notion_service import NotionService
+        from .services.plot_data_extractor import PlotDataExtractor
+        from .services.notion_mapper import NotionDataMapper
+        from .services.html_renderer import HTMLRenderer
+        from fastapi.responses import HTMLResponse
+
+        # Initialize services
+        notion_service = NotionService()
+        plot_extractor = PlotDataExtractor()
+        data_mapper = NotionDataMapper()
+        html_renderer = HTMLRenderer()
+
+        logger.info(
+            f"DEBUG HTML PREVIEW: Starting HTML generation for page_id: {page_id}"
+        )
+
+        # Get data from Notion
+        notion_data = await notion_service.get_page(page_id)
+        plots_data = await plot_extractor.extract_plots_data(page_id)
+
+        # Map data to report model
+        report_data = data_mapper.map_to_report(notion_data, plots_data)
+
+        # Generate HTML
+        html_content = await html_renderer.render_report_html(report_data)
+
+        # Return HTML response that can be viewed in browser
+        return HTMLResponse(content=html_content)
+
+    except Exception as e:
+        logger.error(f"Debug HTML preview error: {str(e)}", exc_info=True)
+        return HTMLResponse(content=f"<h1>Debug Error</h1><pre>{str(e)}</pre>")
