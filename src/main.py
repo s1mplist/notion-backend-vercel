@@ -6,8 +6,8 @@ from datetime import datetime
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 
-from src.models import WebhookRequest
-from src.get_data import process_webhook_data
+from models import WebhookRequest, GenerationMetadata
+from get_data import process_webhook_data
 
 try:
     if sys.platform == "win32":
@@ -57,10 +57,19 @@ async def webhook(request: Request):
         webhook_model = WebhookRequest(**payload)
         logger.info(f"Received webhook: {webhook_model.id}")
 
+        # Initialize generation metadata
+        gen_meta = GenerationMetadata(
+            webhook_id=webhook_model.id,
+            webhook_timestamp=webhook_model.timestamp,
+            entity_id=webhook_model.entity.get("id"),
+            generation_started_at=datetime.now(),
+            generation_status="started",
+        )
+
         async def _bg_process(model: WebhookRequest):
             try:
                 logger.info(f"Background processing started for webhook: {model.id}")
-                result = await process_webhook_data(model)
+                result = await process_webhook_data(gen_meta, model)
                 logger.info(
                     f"Background processing finished for webhook: {model.id} -> {result.get('pdf_path')}"
                 )
@@ -74,7 +83,11 @@ async def webhook(request: Request):
 
         return JSONResponse(
             status_code=200,
-            content={"status": "accepted", "message": "Processing started"},
+            content={
+                "status": "accepted",
+                "message": "Processing started",
+                "generation": gen_meta.model_dump(mode="json"),
+            },
         )
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON")
