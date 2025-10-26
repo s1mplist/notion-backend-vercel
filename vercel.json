@@ -2,13 +2,29 @@
   "version": 2,
   "functions": {
     "api/index.py": {
-      "runtime": "python3.12"
+      "runtime": "python3.12",
+      "maxDuration": 30
     }
   },
   "routes": [
     {
+      "src": "/api/(.*)",
+      "dest": "api/index.py"
+    },
+    {
       "src": "/(.*)",
       "dest": "api/index.py"
+    }
+  ],
+  "build": {
+    "env": {
+      "PYTHONPATH": "./src"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/webhook",
+      "destination": "/api/webhook"
     }
   ]
 }
