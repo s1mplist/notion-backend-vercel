@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Dict, Any, List
-from src.models.report import Report, Plot, Image
+from models.report import Report, Plot, Image
 import unicodedata
 import re
 
