@@ -6,7 +6,6 @@ This file is required for Vercel to properly route requests to our FastAPI appli
 import os
 import sys
 import logging
-from mangum import Mangum
 
 # Configure logging for serverless environment
 if not logging.getLogger().handlers:
@@ -30,51 +29,6 @@ except ImportError as e:
     logger.error(f"Failed to import FastAPI app: {e}")
     raise
 
-# Create a handler for Vercel with optimized settings
-handler = Mangum(
-    app,
-    lifespan="off",
-    api_gateway_base_path=None,
-    text_mime_types=[
-        "application/json",
-        "application/javascript",
-        "application/xml",
-        "application/vnd.api+json",
-    ],
-)
-
-
-# Main handler function for Vercel
-def handler_func(event, context):
-    """
-    Vercel serverless function handler.
-
-    Args:
-        event: The event data from Vercel
-        context: The context object from Vercel
-
-    Returns:
-        Response from the FastAPI application
-    """
-    try:
-        logger.info(
-            f"Processing request: {event.get('httpMethod', 'UNKNOWN')} {event.get('path', '/')}"
-        )
-        return handler(event, context)
-    except Exception as e:
-        logger.error(f"Error in handler: {e}", exc_info=True)
-        return {
-            "statusCode": 500,
-            "body": '{"error": "Internal server error"}',
-            "headers": {"Content-Type": "application/json"},
-        }
-
-
-# Alternative direct handler for Vercel (default export)
-def default_handler(event, context):
-    """Direct handler function for Vercel."""
-    return handler_func(event, context)
-
-
-# Export handlers
-__all__ = ["handler_func", "default_handler", "handler"]
+# Export the FastAPI app directly for Vercel
+# Vercel's Python runtime supports ASGI applications natively
+__all__ = ["app"]
