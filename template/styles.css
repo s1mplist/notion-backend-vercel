@@ -26,8 +26,7 @@ body {
 
 /* Configuração de página para PDF - tamanho aumentado */
 @page {
-    size: 210mm 350mm;
-    margin: 1cm;
+    size: A4;
 }
 
 /* Cabeçalho */
