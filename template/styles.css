@@ -26,7 +26,7 @@ body {
 
 /* Configuração de página para PDF - tamanho aumentado */
 @page {
-    size: A4;
+    size: A3;
 }
 
 /* Cabeçalho */
@@ -115,7 +115,7 @@ body {
     margin-bottom: 0.5rem;
 }
 
-/* Galeria de imagens */
+/* Galeria de imagens - OTIMIZADA PARA PDF */
 .images-and-assessment-group {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
@@ -288,6 +288,7 @@ body {
 
 /* Print */
 @media print {
+    /* Page breaks */
     .talhao {
         page-break-before: always !important;
         page-break-inside: avoid !important;
@@ -296,5 +297,35 @@ body {
     
     .talhao:first-of-type {
         page-break-before: auto !important;
+    }
+    
+    /* Image optimization for PDF size reduction */
+    img, .gallery-image, .header-image {
+        /* Force lower quality rendering to reduce PDF size */
+        image-rendering: -webkit-optimize-contrast;
+        image-rendering: crisp-edges;
+        
+        /* Limit maximum dimensions */
+        max-width: 400px !important;
+        max-height: 300px !important;
+        
+        /* Compress images in PDF */
+        -webkit-print-color-adjust: economy;
+        print-color-adjust: economy;
+        color-adjust: economy;
+    }
+    
+    .gallery-image {
+        /* Gallery images even smaller */
+        max-width: 350px !important;
+        max-height: 200px !important;
+        height: auto !important;
+    }
+    
+    /* Reduce overall quality to save space */
+    * {
+        -webkit-print-color-adjust: economy;
+        print-color-adjust: economy;
+        color-adjust: economy;
     }
 }
