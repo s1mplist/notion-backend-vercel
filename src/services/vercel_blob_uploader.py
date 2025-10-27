@@ -1,8 +1,8 @@
-import os
 import logging
 from pathlib import Path
 from typing import Optional
 import httpx
+from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ class VercelBlobUploader:
             Public URL of the uploaded file, or None if upload fails
         """
         # Vercel automatically injects this token when you connect a Blob store to your project
-        token = os.getenv("BLOB_READ_WRITE_TOKEN", "").strip()
+        token = settings.blob_read_write_token
         if not token:
             logger.info("Vercel Blob upload skipped: BLOB_READ_WRITE_TOKEN not set")
             return None

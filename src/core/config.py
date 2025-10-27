@@ -14,7 +14,10 @@ class Settings(BaseSettings):
     """Application settings with environment variable support."""
 
     model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore"
+        env_file="environments/.env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
     )
 
     # Notion API Configuration
@@ -24,7 +27,7 @@ class Settings(BaseSettings):
     )
 
     # Logging Configuration
-    log_level: str = Field(default="INFO", description="Logging level")
+    log_level: str = Field(default="DEBUG", description="Logging level")
     enable_html_audit: bool = Field(
         default=True, description="Enable HTML audit logging"
     )
@@ -54,6 +57,31 @@ class Settings(BaseSettings):
         description="PDF generation provider (bannerbear, pdfshift, disabled)",
     )
     pdf_api_key: Optional[str] = Field(None, description="PDF service API key")
+
+    # Vercel Blob Configuration
+    blob_read_write_token: Optional[str] = Field(
+        None, description="Vercel Blob storage token"
+    )
+
+    # Public Base URL for shareable links (e.g., https://your-app.vercel.app)
+    public_base_url: Optional[str] = Field(
+        default=None,
+        description="Public base URL used to build shareable preview links",
+    )
+
+    # Image Optimization Configuration
+    enable_image_optimization: bool = Field(
+        default=True, description="Enable image optimization and resizing"
+    )
+    image_max_width: int = Field(
+        default=1920, description="Maximum image width (Full HD)", gt=0
+    )
+    image_max_height: int = Field(
+        default=1080, description="Maximum image height (Full HD)", gt=0
+    )
+    image_quality: int = Field(
+        default=85, description="JPEG quality for optimized images", ge=1, le=100
+    )
 
     # Monitoring Configuration
     enable_metrics: bool = Field(default=True, description="Enable metrics collection")

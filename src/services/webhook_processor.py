@@ -3,7 +3,6 @@ Service for processing webhook data and coordinating report generation.
 """
 
 import logging
-import os
 from datetime import datetime
 from typing import Dict, Optional
 
@@ -13,6 +12,7 @@ from ..services.notion_service import NotionService
 from ..services.plot_data_extractor import PlotDataExtractor
 from ..services.notion_mapper import NotionDataMapper
 from ..services.notion_writer import NotionWriter
+from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -62,15 +62,27 @@ class WebhookProcessor:
             gen_meta.generation_completed_at = datetime.now()
             gen_meta.generation_status = "success"
 
-            # 7. Create Notion record if configured
+            # 7. Build preview URL (if base URL configured)
+            preview_url = None
+            base = getattr(settings, "public_base_url", None)
+            if isinstance(base, str) and base.strip():
+                base_clean = base.rstrip("/")
+                preview_url = f"{base_clean}/report/html-preview?page_id={notion_id}"
+
+            # 8. Create Notion record if configured, include preview URL
             notion_record_page_id = await self._create_notion_record(
-                webhook_data, gen_meta, report_data, pdf_url=None
+                webhook_data,
+                gen_meta,
+                report_data,
+                pdf_url=None,
+                preview_url=preview_url,
             )
 
             return self._build_success_response(
                 pdf_path=None,  # PDF generation disabled
                 notion_record_page_id=notion_record_page_id,
                 pdf_public_url=None,
+                preview_url=preview_url,
             )
 
         except Exception as e:
@@ -130,9 +142,10 @@ class WebhookProcessor:
         gen_meta: GenerationMetadata,
         report_data,
         pdf_url: Optional[str],
+        preview_url: Optional[str] = None,
     ) -> Optional[str]:
         """Create a record in Notion database if configured."""
-        output_db_id = os.getenv("NOTION_OUTPUT_DATABASE_ID", "").strip()
+        output_db_id = settings.notion_output_database_id
         if not output_db_id:
             return None
 
@@ -147,6 +160,7 @@ class WebhookProcessor:
                 payload=webhook_data.dict(),
                 metadata=gen_meta,
                 pdf_url=pdf_url,
+                preview_url=preview_url,
                 additional_fields={
                     "Farm": getattr(report_data, "farm_name", "") or "",
                     "Fazenda": getattr(report_data, "farm_name", "") or "",
@@ -166,6 +180,7 @@ class WebhookProcessor:
         pdf_path: Optional[str],
         notion_record_page_id: Optional[str],
         pdf_public_url: Optional[str],
+        preview_url: Optional[str] = None,
     ) -> Dict:
         """Build success response dictionary."""
         return {
@@ -174,6 +189,7 @@ class WebhookProcessor:
             "pdf_path": pdf_path,  # Will be None until new service is implemented
             "notion_record_page_id": notion_record_page_id,
             "pdf_public_url": pdf_public_url,  # Will be None until new service is implemented
+            "preview_url": preview_url,
         }
 
     async def _handle_error(
@@ -185,7 +201,7 @@ class WebhookProcessor:
         """Handle errors by creating error record in Notion if configured."""
         try:
             # Best-effort: write failed metadata if configured
-            output_db_id = os.getenv("NOTION_OUTPUT_DATABASE_ID", "").strip()
+            output_db_id = settings.notion_output_database_id
             if output_db_id:
                 error_meta = GenerationMetadata(
                     webhook_id=webhook_data.id,

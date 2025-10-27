@@ -5,7 +5,7 @@ Notion API client service for data retrieval operations.
 import logging
 from typing import Dict, List
 from notion_client import AsyncClient
-import os
+from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +14,7 @@ class NotionService:
     """Service for interacting with Notion API."""
 
     def __init__(self):
-        self.token = os.environ["NOTION_TOKEN"]
+        self.token = settings.notion_token
 
     async def get_page(self, page_id: str) -> Dict:
         """

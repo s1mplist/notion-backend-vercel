@@ -219,6 +219,8 @@ class PlotDataExtractor:
         if not url:
             return None
 
+        # Keep original URL without optimization
+
         # Extract caption
         caption = ""
         try:

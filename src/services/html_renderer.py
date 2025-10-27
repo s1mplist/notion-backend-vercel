@@ -6,7 +6,10 @@ from datetime import datetime
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 from typing import Optional
+
 from ..models.report import Report
+from ..core.config import settings
+
 
 logger = logging.getLogger(__name__)
 
@@ -38,12 +41,8 @@ class HTMLRenderer:
         self._styles = self._read_styles()
 
         # Audit logging configuration
-        import os
-
-        self._enable_html_audit = (
-            os.getenv("ENABLE_HTML_AUDIT", "true").lower() == "true"
-        )
-        self._html_audit_max_chars = int(os.getenv("HTML_AUDIT_MAX_CHARS", "2000"))
+        self._enable_html_audit = settings.enable_html_audit
+        self._html_audit_max_chars = settings.html_audit_max_chars
 
     def _read_styles(self) -> str:
         """Read the CSS file and return its contents."""
@@ -94,7 +93,8 @@ class HTMLRenderer:
                 idx = html.find(marker, start)
                 if idx == -1:
                     break
-                q1 = html.find('"', idx + len('src="'))
+                # Find the opening and closing quotes of the src attribute
+                q1 = html.find('"', idx)  # the first quote after src=
                 q2 = html.find('"', q1 + 1)
                 if q1 == -1 or q2 == -1:
                     break
@@ -102,7 +102,9 @@ class HTMLRenderer:
                 data_uri = self._data_uri_for_local_image(path_val)
                 if data_uri:
                     html = html[: q1 + 1] + data_uri + html[q2:]
-                start = q2 + 1
+                    start = q1 + 1 + len(data_uri)
+                else:
+                    start = q2 + 1
 
         logger.debug("HTML content after inlining assets: %s", html)
         return html
@@ -117,6 +119,7 @@ class HTMLRenderer:
         Returns:
             Complete HTML string ready for PDF conversion
         """
+        # Use report data as-is (no image optimization)
         next_visit = getattr(report_data, "next_visit_date", None)
         current_visit = getattr(report_data, "current_visit_date", None)
 
@@ -295,3 +298,5 @@ class HTMLRenderer:
             total_images,
             "; ".join(plot_names),
         )
+
+    # Note: image optimization intentionally removed per requirements

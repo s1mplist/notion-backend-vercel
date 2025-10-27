@@ -1,11 +1,11 @@
 import json
-import os
 from typing import Optional
 from datetime import datetime, date
 import uuid as _uuid
 from notion_client import AsyncClient
 
 from ..models.generation import GenerationMetadata
+from ..core.config import settings
 
 
 class NotionWriter:
@@ -46,7 +46,10 @@ class NotionWriter:
 
     @staticmethod
     def _build_children_blocks(
-        payload: dict, metadata: GenerationMetadata, pdf_url: Optional[str]
+        payload: dict,
+        metadata: GenerationMetadata,
+        pdf_url: Optional[str],
+        preview_url: Optional[str] = None,
     ):
         payload_json = NotionWriter._to_json_text(payload)
         metadata_json = metadata.model_dump_json(indent=2)
@@ -98,6 +101,29 @@ class NotionWriter:
             },
         ]
 
+        if preview_url:
+            blocks.extend(
+                [
+                    {
+                        "object": "block",
+                        "type": "heading_2",
+                        "heading_2": {
+                            "rich_text": [
+                                {
+                                    "type": "text",
+                                    "text": {"content": "Pré-visualização (HTML)"},
+                                }
+                            ]
+                        },
+                    },
+                    {
+                        "object": "block",
+                        "type": "bookmark",
+                        "bookmark": {"url": preview_url},
+                    },
+                ]
+            )
+
         if pdf_url:
             blocks.extend(
                 [
@@ -134,13 +160,14 @@ class NotionWriter:
         payload: dict,
         metadata: GenerationMetadata,
         pdf_url: Optional[str] = None,
+        preview_url: Optional[str] = None,
         additional_fields: Optional[dict] = None,
     ) -> str:
         """Create a page record in the target Notion database to log a generation.
 
         Returns the created page id.
         """
-        async with AsyncClient(auth=os.environ["NOTION_TOKEN"]) as notion:
+        async with AsyncClient(auth=settings.notion_token) as notion:
             db = await notion.databases.retrieve(database_id=database_id)
             db_props = db.get("properties", {}) or {}
 
@@ -307,6 +334,14 @@ class NotionWriter:
                 else None,
             )
 
+            # Preview URL (url)
+            add_prop(
+                "Preview",
+                lambda s: {"url": preview_url}
+                if s.get("type") == "url" and preview_url
+                else None,
+            )
+
             add_prop(
                 "Started At",
                 lambda s: {"date": {"start": start_iso}}
@@ -393,7 +428,7 @@ class NotionWriter:
                 parent={"type": "database_id", "database_id": database_id},
                 properties=properties,
                 children=NotionWriter._build_children_blocks(
-                    payload, metadata, pdf_url
+                    payload, metadata, pdf_url, preview_url
                 ),
             )
             return page.get("id")
