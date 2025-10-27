@@ -12,6 +12,7 @@ from services.notion_service import NotionService
 from services.plot_data_extractor import PlotDataExtractor
 from services.notion_mapper import NotionDataMapper
 from services.notion_writer import NotionWriter
+from services.metadata_service import MetadataService
 from core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ class WebhookProcessor:
         self.notion_service = NotionService()
         self.plot_extractor = PlotDataExtractor()
         self.data_mapper = NotionDataMapper()
+        self.metadata_service = MetadataService()
 
     async def process_webhook_data(
         self, gen_meta: GenerationMetadata, webhook_data: WebhookRequest
@@ -57,6 +59,16 @@ class WebhookProcessor:
             # 5. Map data to report model
             report_data = self.data_mapper.map_to_report(notion_data, plots_data)
             self._inject_farm_name(report_data, farm_name)
+
+            # 5.5. Enrich with metadata from Notion databases (if configured)
+            try:
+                report_data = await self.metadata_service.enrich_report_with_metadata(
+                    report_data, farm_name
+                )
+                logger.info("Report enriched with metadata from Notion databases")
+            except Exception as e:
+                logger.warning(f"Failed to enrich report with metadata: {e}")
+                # Continue without metadata enrichment
 
             # 6. Update generation metadata
             gen_meta.generation_completed_at = datetime.now()

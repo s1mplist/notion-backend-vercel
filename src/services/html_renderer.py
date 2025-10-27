@@ -1,14 +1,12 @@
 import logging
-import base64
-import mimetypes
 import hashlib
 from datetime import datetime
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
-from typing import Optional
 
 from models.report import Report
 from core.config import settings
+from utils.html_utils import inline_assets
 
 
 logger = logging.getLogger(__name__)
@@ -53,62 +51,6 @@ class HTMLRenderer:
             logger.warning("CSS file not found; continuing without styles")
             return ""
 
-    def _data_uri_for_local_image(self, rel_path: str) -> Optional[str]:
-        """Convert local image to data URI for embedding in HTML."""
-        # Support ./images/... or images/...
-        rel = rel_path.lstrip("./")
-        img_path = self.template_dir / rel
-        if not img_path.exists():
-            return None
-        try:
-            data = img_path.read_bytes()
-            mime, _ = mimetypes.guess_type(str(img_path))
-            if not mime:
-                mime = "image/jpeg"
-            b64 = base64.b64encode(data).decode("ascii")
-            return f"data:{mime};base64,{b64}"
-        except Exception as e:
-            logger.exception("Failed to inline image %s: %s", img_path, e)
-            return None
-
-    def _inline_assets(self, html: str) -> str:
-        """Inline CSS and local images into the HTML."""
-        # Inline styles.css
-        if 'href="styles.css"' in html:
-            style_tag = f"<style>\n{self._styles}\n</style>"
-            html = html.replace('<link rel="stylesheet" href="styles.css">', style_tag)
-            # Try variations
-            html = html.replace(
-                '<link rel="stylesheet" href="./styles.css">', style_tag
-            )
-
-        # Inline local images used by templates (header logos, etc.)
-        markers = [
-            'src="./images/',
-            'src="images/',
-        ]
-        for marker in markers:
-            start = 0
-            while True:
-                idx = html.find(marker, start)
-                if idx == -1:
-                    break
-                # Find the opening and closing quotes of the src attribute
-                q1 = html.find('"', idx)  # the first quote after src=
-                q2 = html.find('"', q1 + 1)
-                if q1 == -1 or q2 == -1:
-                    break
-                path_val = html[q1 + 1 : q2]
-                data_uri = self._data_uri_for_local_image(path_val)
-                if data_uri:
-                    html = html[: q1 + 1] + data_uri + html[q2:]
-                    start = q1 + 1 + len(data_uri)
-                else:
-                    start = q2 + 1
-
-        logger.debug("HTML content after inlining assets: %s", html)
-        return html
-
     async def render_report_html(self, report_data: Report) -> str:
         """
         Render the complete HTML for the report.
@@ -141,7 +83,7 @@ class HTMLRenderer:
 
         # Use async template rendering
         html = await self.report_template.render_async(**context)
-        final_html = self._inline_assets(html)
+        final_html = inline_assets(html, self.template_dir, self._styles)
 
         # Log HTML for audit
         if self._enable_html_audit:

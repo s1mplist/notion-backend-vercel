@@ -1,8 +1,7 @@
 from datetime import datetime
 from typing import Dict, Any, List
 from models.report import Report, Plot, Image
-import unicodedata
-import re
+from utils.notion_utils import extract_text
 
 
 class NotionDataMapper:
@@ -80,22 +79,6 @@ class NotionDataMapper:
         return filtered
 
     @staticmethod
-    def extract_text(rich_text_list: List[Dict[str, Any]]) -> str:
-        """Extract text from Notion's rich_text format"""
-        if not rich_text_list:
-            return ""
-        return " ".join(
-            text.get("text", {}).get("content", "") for text in rich_text_list
-        )
-
-    @staticmethod
-    def extract_date(date_obj: Dict[str, Any]) -> datetime:
-        """Convert Notion date to datetime"""
-        if not date_obj or "start" not in date_obj:
-            return datetime.now()
-        return datetime.fromisoformat(date_obj["start"].replace("Z", "+00:00"))
-
-    @staticmethod
     def extract_images(files: List[Dict[str, Any]]) -> List[Image]:
         """Extract images from Notion's files property"""
         images = []
@@ -108,27 +91,7 @@ class NotionDataMapper:
                     images.append(Image(url=url, description=file.get("name", "")))
         return images
 
-    @staticmethod
-    def normalize_prop_name(name: str) -> str:
-        """Normalize a Notion property name for robust matching.
-
-        - Convert to lowercase
-        - Remove diacritics (accents)
-        - Replace non-alphanumeric characters with a single space
-        - Collapse multiple spaces and strip
-        """
-        if not name:
-            return ""
-        # Normalize unicode and remove diacritics
-        nfkd = unicodedata.normalize("NFKD", name)
-        no_accents = "".join([c for c in nfkd if not unicodedata.combining(c)])
-        # Lowercase
-        s = no_accents.lower()
-        # Replace non-alphanumeric characters with spaces
-        s = re.sub(r"[^a-z0-9]+", " ", s)
-        # Collapse spaces
-        s = re.sub(r"\s+", " ", s).strip()
-        return s
+    # normalize_prop_name, extract_text, extract_date agora estão em src.utils.notion_utils
 
     @classmethod
     def map_plot(cls, plot_data: Dict[str, Any]) -> Plot:
@@ -159,18 +122,16 @@ class NotionDataMapper:
         props = notion_data.get("properties", {})
 
         # Extrair textos das propriedades rich_text
-        informacoes = cls.extract_text(
+        informacoes = extract_text(
             props.get("Informações Gerais", {}).get("rich_text", [])
         )
-        cronograma = cls.extract_text(
+        cronograma = extract_text(
             props.get("Cronograma de Operações da Fazenda", {}).get("rich_text", [])
         )
 
         # Extrair datas
-        data_visita = cls.extract_text(
-            props.get("Data da Visita", {}).get("rich_text", [])
-        )
-        data_retorno = cls.extract_text(
+        data_visita = extract_text(props.get("Data da Visita", {}).get("rich_text", []))
+        data_retorno = extract_text(
             props.get("Data de Retorno (Prevista)", {}).get("rich_text", [])
         )
 

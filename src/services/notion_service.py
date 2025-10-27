@@ -5,6 +5,7 @@ Notion API client service for data retrieval operations.
 import logging
 from typing import Dict, List
 from notion_client import AsyncClient
+
 from core.config import settings
 
 logger = logging.getLogger(__name__)

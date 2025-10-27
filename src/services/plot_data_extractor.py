@@ -5,7 +5,7 @@ Service for extracting and processing plot data from Notion pages.
 import logging
 from typing import Dict, List
 from services.notion_service import NotionService
-from services.notion_mapper import NotionDataMapper
+from utils.notion_utils import normalize_prop_name
 
 logger = logging.getLogger(__name__)
 
@@ -93,21 +93,18 @@ class PlotDataExtractor:
     def _find_photos_property_key(self, properties: Dict, talhao_number: int) -> str:
         """Find the photos property key for a given talhao number."""
         # Try to find the fotos property in a case-insensitive way and support variations
-        target1_norm = NotionDataMapper.normalize_prop_name(
-            f"Upload de fotos - {talhao_number:02d}"
-        )
-        target2_norm = NotionDataMapper.normalize_prop_name(
-            f"Upload de fotos - {talhao_number}"
-        )
+
+        target1_norm = normalize_prop_name(f"Upload de fotos - {talhao_number:02d}")
+        target2_norm = normalize_prop_name(f"Upload de fotos - {talhao_number}")
 
         for k in properties.keys():
-            kn = NotionDataMapper.normalize_prop_name(k)
+            kn = normalize_prop_name(k)
             if kn == target1_norm or kn == target2_norm:
                 return k
 
         # Also support keys that start with the prefix (handles small variations)
         for k in properties.keys():
-            kn = NotionDataMapper.normalize_prop_name(k)
+            kn = normalize_prop_name(k)
             if kn.startswith(target1_norm) or kn.startswith(target2_norm):
                 return k
 

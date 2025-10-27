@@ -1,32 +1,14 @@
-import json
 from typing import Optional
 from datetime import datetime, date
-import uuid as _uuid
 from notion_client import AsyncClient
 
 from models.generation import GenerationMetadata
 from core.config import settings
+from utils.json_utils import to_json_string
 
 
 class NotionWriter:
-    @staticmethod
-    def _json_default(o):
-        # Handle common non-serializable types
-        if isinstance(o, (datetime, date)):
-            return o.isoformat()
-        if isinstance(o, _uuid.UUID):
-            return str(o)
-        return str(o)
-
-    @staticmethod
-    def _to_json_text(obj: dict) -> str:
-        try:
-            return json.dumps(
-                obj, ensure_ascii=False, indent=2, default=NotionWriter._json_default
-            )
-        except Exception:
-            # Fallback to simple string representation
-            return str(obj)
+    """Service for writing data to Notion databases."""
 
     @staticmethod
     async def _get_title_property_name(notion: AsyncClient, database_id: str) -> str:
@@ -51,7 +33,7 @@ class NotionWriter:
         pdf_url: Optional[str],
         preview_url: Optional[str] = None,
     ):
-        payload_json = NotionWriter._to_json_text(payload)
+        payload_json = to_json_string(payload)
         metadata_json = metadata.model_dump_json(indent=2)
 
         blocks = [
