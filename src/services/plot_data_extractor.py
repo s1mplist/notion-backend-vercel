@@ -4,8 +4,8 @@ Service for extracting and processing plot data from Notion pages.
 
 import logging
 from typing import Dict, List
-from ..services.notion_service import NotionService
-from ..services.notion_mapper import NotionDataMapper
+from services.notion_service import NotionService
+from services.notion_mapper import NotionDataMapper
 
 logger = logging.getLogger(__name__)
 

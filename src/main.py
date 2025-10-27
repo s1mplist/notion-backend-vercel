@@ -6,9 +6,9 @@ from datetime import datetime
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 
-from .models import WebhookRequest, GenerationMetadata
-from .get_data import process_webhook_data
-from .core.config import settings
+from models import WebhookRequest, GenerationMetadata
+from get_data import process_webhook_data
+from core.config import settings
 
 try:
     if sys.platform == "win32":
@@ -182,10 +182,10 @@ async def debug_html(page_id: str = None):
             raise HTTPException(status_code=400, detail="page_id parameter is required")
 
         # Import services
-        from .services.notion_service import NotionService
-        from .services.plot_data_extractor import PlotDataExtractor
-        from .services.notion_mapper import NotionDataMapper
-        from .services.html_renderer import HTMLRenderer
+        from services.notion_service import NotionService
+        from services.plot_data_extractor import PlotDataExtractor
+        from services.notion_mapper import NotionDataMapper
+        from services.html_renderer import HTMLRenderer
 
         # Initialize services
         notion_service = NotionService()
@@ -238,10 +238,10 @@ async def debug_html_preview(page_id: str = None):
             return "<h1>Error: page_id parameter is required</h1><p>Usage: /debug/html-preview?page_id=YOUR_NOTION_PAGE_ID</p>"
 
         # Import services
-        from .services.notion_service import NotionService
-        from .services.plot_data_extractor import PlotDataExtractor
-        from .services.notion_mapper import NotionDataMapper
-        from .services.html_renderer import HTMLRenderer
+        from services.notion_service import NotionService
+        from services.plot_data_extractor import PlotDataExtractor
+        from services.notion_mapper import NotionDataMapper
+        from services.html_renderer import HTMLRenderer
         from fastapi.responses import HTMLResponse
 
         # Initialize services
@@ -288,10 +288,10 @@ async def report_html_preview(page_id: str = None):
             )
 
         # Import services locally to keep cold start lean
-        from .services.notion_service import NotionService
-        from .services.plot_data_extractor import PlotDataExtractor
-        from .services.notion_mapper import NotionDataMapper
-        from .services.html_renderer import HTMLRenderer
+        from services.notion_service import NotionService
+        from services.plot_data_extractor import PlotDataExtractor
+        from services.notion_mapper import NotionDataMapper
+        from services.html_renderer import HTMLRenderer
         from fastapi.responses import HTMLResponse
 
         notion_service = NotionService()

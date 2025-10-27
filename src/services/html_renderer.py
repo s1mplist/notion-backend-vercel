@@ -7,8 +7,8 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 from typing import Optional
 
-from ..models.report import Report
-from ..core.config import settings
+from models.report import Report
+from core.config import settings
 
 
 logger = logging.getLogger(__name__)

@@ -4,7 +4,7 @@ Logging configuration module.
 
 import logging
 from pathlib import Path
-from ..core.config import settings
+from core.config import settings
 
 
 def setup_logging():
