@@ -20,11 +20,5 @@
     "env": {
       "PYTHONPATH": "./src"
     }
-  },
-  "rewrites": [
-    {
-      "source": "/webhook",
-      "destination": "/api/webhook"
-    }
-  ]
+  }
 }
