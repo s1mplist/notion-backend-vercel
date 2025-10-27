@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     """Application settings with environment variable support."""
 
     model_config = SettingsConfigDict(
-        env_file="environments/.env",
+        env_file="../environments/.env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -24,6 +24,17 @@ class Settings(BaseSettings):
     notion_token: str = Field(..., description="Notion API token", min_length=50)
     notion_output_database_id: Optional[str] = Field(
         None, description="Notion database ID for storing generation records"
+    )
+
+    # Notion Metadata Databases (optional - for enriching reports with additional data)
+    notion_farms_database_id: Optional[str] = Field(
+        None, description="Notion database ID for farms metadata"
+    )
+    notion_consultants_database_id: Optional[str] = Field(
+        None, description="Notion database ID for consultants metadata"
+    )
+    notion_plots_database_id: Optional[str] = Field(
+        None, description="Notion database ID for plots metadata"
     )
 
     # Logging Configuration
@@ -57,6 +68,12 @@ class Settings(BaseSettings):
         description="PDF generation provider (bannerbear, pdfshift, disabled)",
     )
     pdf_api_key: Optional[str] = Field(None, description="PDF service API key")
+
+    # Supabase Configuration
+    supabase_url: Optional[str] = Field(None, description="Supabase project URL")
+    supabase_key: Optional[str] = Field(
+        None, description="Supabase anon/service role key"
+    )
 
     # Vercel Blob Configuration
     blob_read_write_token: Optional[str] = Field(

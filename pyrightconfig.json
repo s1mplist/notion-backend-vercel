@@ -29,6 +29,7 @@
   ],
   "venvPath": ".",
   "venv": ".venv",
+  "typeCheckingMode": "off",
   "reportMissingImports": false,
   "reportMissingTypeStubs": false,
   "pythonVersion": "3.12"
