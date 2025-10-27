@@ -1,5 +1,9 @@
 {
-    "python.analysis.extraPaths": [
-        "./src"
-    ]
+    "python.autoComplete.extraPaths": [
+        "${workspaceFolder}/src"
+    ],
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.formatOnSave": true,
+    }
 }
