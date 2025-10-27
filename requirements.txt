@@ -487,6 +487,10 @@ jupyterlab-widgets==3.0.15 \
     --hash=sha256:2920888a0c2922351a9202817957a68c07d99673504d6cd37345299e971bb08b \
     --hash=sha256:d59023d7d7ef71400d51e6fee9a88867f6e65e10a4201605d2d7f3e8f012a31c
     # via ipywidgets
+mangum==0.19.0 \
+    --hash=sha256:e388e7c491b7b67970f8234e46fd4a7b21ff87785848f418de08148f71cf0bd6 \
+    --hash=sha256:e500b35f495d5e68ac98bc97334896d6101523f2ee2c57ba6a61893b65266e59
+    # via notion-backend-vercel
 markupsafe==3.0.3 \
     --hash=sha256:068f375c472b3e7acbe2d5318dea141359e6900156b5b2ba06a30b169086b91a \
     --hash=sha256:0bf2a864d67e76e5c9a34dc26ec616a66b9888e25e7b9460e1c76d3293bd9dbf \
@@ -1130,6 +1134,7 @@ typing-extensions==4.15.0 \
     #   anyio
     #   fastapi
     #   ipython
+    #   mangum
     #   pydantic
     #   pydantic-core
     #   starlette
