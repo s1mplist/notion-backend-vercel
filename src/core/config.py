@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     """Application settings with environment variable support."""
 
     model_config = SettingsConfigDict(
-        env_file="../environments/.env",
+        env_file="environments/.env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -26,25 +26,15 @@ class Settings(BaseSettings):
         None, description="Notion database ID for storing generation records"
     )
 
-    # Notion Metadata Databases (optional - for enriching reports with additional data)
-    notion_farms_database_id: Optional[str] = Field(
-        None, description="Notion database ID for farms metadata"
+    notion_fact_database_id: str = Field(
+        ..., description="Notion Fact Database ID", min_length=32
     )
-    notion_consultants_database_id: Optional[str] = Field(
-        None, description="Notion database ID for consultants metadata"
-    )
-    notion_plots_database_id: Optional[str] = Field(
-        None, description="Notion database ID for plots metadata"
+    notion_talhoes_database_id: str = Field(
+        ..., description="Notion Talhoes Database ID", min_length=32
     )
 
     # Logging Configuration
     log_level: str = Field(default="DEBUG", description="Logging level")
-    enable_html_audit: bool = Field(
-        default=True, description="Enable HTML audit logging"
-    )
-    html_audit_max_chars: int = Field(
-        default=2000, description="Maximum characters for HTML audit logs"
-    )
 
     # API Configuration
     api_title: str = Field(default="Notion Backend API", description="API title")
@@ -62,42 +52,26 @@ class Settings(BaseSettings):
         default=60, description="Rate limit window in seconds", gt=0
     )
 
-    # PDF Generation Configuration
-    pdf_provider: str = Field(
-        default="disabled",
-        description="PDF generation provider (bannerbear, pdfshift, disabled)",
-    )
-    pdf_api_key: Optional[str] = Field(None, description="PDF service API key")
-
-    # Supabase Configuration
-    supabase_url: Optional[str] = Field(None, description="Supabase project URL")
-    supabase_key: Optional[str] = Field(
-        None, description="Supabase anon/service role key"
-    )
-
     # Vercel Blob Configuration
     blob_read_write_token: Optional[str] = Field(
         None, description="Vercel Blob storage token"
+    )
+
+    # HTML Rendering / Audit
+    enable_html_audit: bool = Field(
+        default=False,
+        description="Enable detailed HTML audit logs (debug only)",
+    )
+    html_audit_max_chars: int = Field(
+        default=12000,
+        description="Max characters of HTML to include in audit logs",
+        gt=1000,
     )
 
     # Public Base URL for shareable links (e.g., https://your-app.vercel.app)
     public_base_url: Optional[str] = Field(
         default=None,
         description="Public base URL used to build shareable preview links",
-    )
-
-    # Image Optimization Configuration
-    enable_image_optimization: bool = Field(
-        default=True, description="Enable image optimization and resizing"
-    )
-    image_max_width: int = Field(
-        default=1920, description="Maximum image width (Full HD)", gt=0
-    )
-    image_max_height: int = Field(
-        default=1080, description="Maximum image height (Full HD)", gt=0
-    )
-    image_quality: int = Field(
-        default=85, description="JPEG quality for optimized images", ge=1, le=100
     )
 
     # Monitoring Configuration
@@ -114,24 +88,12 @@ class Settings(BaseSettings):
             raise ValueError(f"Log level must be one of: {valid_levels}")
         return v.upper()
 
-    @field_validator("pdf_provider")
-    def validate_pdf_provider(cls, v):
-        """Validate PDF provider."""
-        valid_providers = ["bannerbear", "pdfshift", "disabled"]
-        if v.lower() not in valid_providers:
-            raise ValueError(f"PDF provider must be one of: {valid_providers}")
-        return v.lower()
-
     @field_validator("notion_token")
     def validate_notion_token(cls, v):
         """Validate Notion token format."""
         if not v.startswith(("ntn_", "secret_")):
             raise ValueError('Notion token must start with "ntn_" or "secret_"')
         return v
-
-    def is_pdf_enabled(self) -> bool:
-        """Check if PDF generation is enabled."""
-        return self.pdf_provider != "disabled" and self.pdf_api_key is not None
 
 
 # Global settings instance

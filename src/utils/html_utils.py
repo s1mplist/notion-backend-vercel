@@ -23,8 +23,17 @@ def data_uri_for_local_image(template_dir: Path, rel_path: str) -> Optional[str]
     rel = rel_path.lstrip("./")
     img_path = template_dir / rel
 
+    # Fallback: try templates/assets/<rel> (so ./images/... resolves to templates/assets/images/...)
     if not img_path.exists():
-        return None
+        try:
+            root_templates = template_dir.parent.parent  # .../templates
+            alt_path = root_templates / "assets" / rel
+            if alt_path.exists():
+                img_path = alt_path
+            else:
+                return None
+        except Exception:
+            return None
 
     try:
         data = img_path.read_bytes()
