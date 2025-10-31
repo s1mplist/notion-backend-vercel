@@ -8,10 +8,10 @@ from typing import Dict, Optional
 
 from models import WebhookRequest
 from models.generation import GenerationMetadata
-from services.notion_service import NotionService
+from services.notion.notion_service import NotionService
 from services.plot_data_extractor import PlotDataExtractor
-from services.notion_mapper import NotionDataMapper
-from services.notion_writer import NotionWriter
+from services.notion.mapper import NotionDataMapper
+from services.notion.writer import NotionWriter
 from services.metadata_service import MetadataService
 from core.config import settings
 

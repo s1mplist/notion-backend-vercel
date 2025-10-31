@@ -4,7 +4,7 @@ Service for extracting and processing plot data from Notion pages.
 
 import logging
 from typing import Dict, List
-from services.notion_service import NotionService
+from services.notion.notion_service import NotionService
 from utils.notion_utils import normalize_prop_name
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ class PlotDataExtractor:
             logger.info(f"Retrieving plots for report ID: {report_id}")
 
             # Get page properties
-            page = await self.notion_service.get_page(report_id)
+            page = self.notion_service.get_page(report_id)
             properties = page["properties"]
 
             # Extract plot information from properties
@@ -150,7 +150,7 @@ class PlotDataExtractor:
         )
 
         try:
-            blocks = await self.notion_service.get_page_blocks(report_id)
+            blocks = self.notion_service.get_page_blocks(report_id)
 
             # Helper to get plain text from rich_text lists
             def rt_text(items):

@@ -23,28 +23,33 @@ class HTMLRenderer:
 
     def __init__(self):
         repo_root = Path(__file__).resolve().parents[2]
-        self.template_dir = repo_root / "template"
+        # Default templates root (used for legacy renderer)
+        self.templates_root = repo_root / "templates"
 
+        # Legacy environment (kept for backward compatibility with report_template.html)
         self.env = Environment(
-            loader=FileSystemLoader(str(self.template_dir)),
+            loader=FileSystemLoader(str(self.templates_root)),
             enable_async=True,
             auto_reload=False,
             cache_size=100,
         )
 
-        # Load templates
-        self.report_template = self.env.get_template("report_template.html")
+        # Load legacy template if present (optional)
+        try:
+            self.report_template = self.env.get_template("report_template.html")
+        except Exception:
+            self.report_template = None
 
-        # Read and cache CSS
-        self._styles = self._read_styles()
+        # Default styles for legacy rendering
+        self._styles = self._read_styles(self.templates_root)
 
         # Audit logging configuration
         self._enable_html_audit = settings.enable_html_audit
         self._html_audit_max_chars = settings.html_audit_max_chars
 
-    def _read_styles(self) -> str:
+    def _read_styles(self, base_dir: Path) -> str:
         """Read the CSS file and return its contents."""
-        css_path = self.template_dir / "styles.css"
+        css_path = base_dir / "styles.css"
         try:
             return css_path.read_text(encoding="utf-8")
         except Exception:
@@ -81,9 +86,14 @@ class HTMLRenderer:
             "plots": getattr(report_data, "plots", []) or [],
         }
 
-        # Use async template rendering
+        if not self.report_template:
+            raise RuntimeError(
+                "Legacy report_template.html not found. Use render_template_slug for dynamic templates."
+            )
+
+        # Use async template rendering (legacy)
         html = await self.report_template.render_async(**context)
-        final_html = inline_assets(html, self.template_dir, self._styles)
+        final_html = inline_assets(html, self.templates_root, self._styles)
 
         # Log HTML for audit
         if self._enable_html_audit:
@@ -104,6 +114,68 @@ class HTMLRenderer:
         import asyncio
 
         return asyncio.run(self.render_report_html(report_data))
+
+    async def render_template_slug(
+        self, template_slug: str, report_data: Report
+    ) -> str:
+        """
+        Render a report using a dynamic template bundle under templates/relatorios/{template_slug}.
+
+        The bundle must contain:
+        - template.html (main template)
+        - styles.css (optional)
+        - any partials like talhao.html (referenced via {% include 'talhao.html' %})
+
+        Args:
+            template_slug: e.g. "terras-gerais"
+            report_data: Report model with data
+
+        Returns:
+            Rendered HTML string
+        """
+        base_dir = self.templates_root / "relatorios" / template_slug
+        if not base_dir.exists():
+            raise FileNotFoundError(
+                f"Template '{template_slug}' não encontrado em {base_dir}"
+            )
+
+        # Build a dedicated Jinja environment rooted at the template bundle directory
+        env = Environment(
+            loader=FileSystemLoader(str(base_dir)),
+            enable_async=True,
+            auto_reload=False,
+            cache_size=100,
+        )
+
+        template = env.get_template("template.html")
+        styles = self._read_styles(base_dir)
+
+        next_visit = getattr(report_data, "next_visit_date", None)
+        current_visit = getattr(report_data, "current_visit_date", None)
+
+        context = {
+            "farm_name": getattr(report_data, "farm_name", ""),
+            "consultant_name": getattr(report_data, "consultant_name", ""),
+            "report_month": getattr(report_data, "report_month", ""),
+            "owner_name": getattr(report_data, "owner_name", ""),
+            "farm_city": getattr(report_data, "farm_city", ""),
+            "harvest_period": getattr(report_data, "harvest_period", ""),
+            "general_info": getattr(report_data, "general_info", ""),
+            "next_visit_date": next_visit.strftime("%d/%m/%Y") if next_visit else "",
+            "current_visit_date": current_visit.strftime("%d/%m/%Y")
+            if current_visit
+            else "",
+            "operations_schedule": getattr(report_data, "operations_schedule", ""),
+            "plots": getattr(report_data, "plots", []) or [],
+        }
+
+        html = await template.render_async(**context)
+        final_html = inline_assets(html, base_dir, styles)
+
+        if self._enable_html_audit:
+            self._log_html_audit(final_html, context, report_data)
+
+        return final_html
 
     def get_css_content(self) -> str:
         """
@@ -147,11 +219,18 @@ class HTMLRenderer:
         )
 
         # Log full HTML content at debug level (can be disabled in production)
+        # Sanitize HTML content for logging on terminals that can't encode emojis
+        truncated = self._truncate_html_for_log(html_content)
+        try:
+            safe_html = truncated.encode("ascii", "backslashreplace").decode("ascii")
+        except Exception:
+            safe_html = truncated  # best-effort
+
         logger.debug(
             "HTML_AUDIT_CONTENT | Hash: %s | Timestamp: %s | Content:\n%s",
             content_hash,
             datetime.now().isoformat(),
-            self._truncate_html_for_log(html_content),
+            safe_html,
         )
 
         # Log plots data summary
