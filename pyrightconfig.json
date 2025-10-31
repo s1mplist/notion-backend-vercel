@@ -1,7 +1,6 @@
 {
   "include": [
     "src",
-    "api",
     "tests"
   ],
   "exclude": [
@@ -19,13 +18,6 @@
         "src"
       ]
     },
-    {
-      "root": "api",
-      "pythonVersion": "3.12",
-      "extraPaths": [
-        "src"
-      ]
-    }
   ],
   "venvPath": ".",
   "venv": ".venv",
