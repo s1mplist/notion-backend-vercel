@@ -4,14 +4,16 @@ Monitoring and metrics collection module.
 Provides execution tracking, performance metrics, and health monitoring.
 """
 
-import time
 import asyncio
-from functools import wraps
-from typing import Dict, Any, Callable, Optional
-from collections import defaultdict, deque
 import logging
+import time
+from collections import defaultdict, deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
+from functools import wraps
+from typing import Any
+
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +25,7 @@ class MetricData:
     name: str
     value: float
     timestamp: datetime
-    tags: Dict[str, str] = field(default_factory=dict)
+    tags: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -77,12 +79,12 @@ class MetricsCollector:
     """Collects and manages application metrics."""
 
     def __init__(self):
-        self.metrics: Dict[str, deque] = defaultdict(lambda: deque(maxlen=1000))
-        self.execution_stats: Dict[str, ExecutionStats] = defaultdict(ExecutionStats)
+        self.metrics: dict[str, deque] = defaultdict(lambda: deque(maxlen=1000))
+        self.execution_stats: dict[str, ExecutionStats] = defaultdict(ExecutionStats)
         self.start_time = datetime.now()
 
     def record_metric(
-        self, name: str, value: float, tags: Optional[Dict[str, str]] = None
+        self, name: str, value: float, tags: dict[str, str] | None = None
     ):
         """Record a metric value."""
         metric = MetricData(
@@ -102,7 +104,7 @@ class MetricsCollector:
         self.record_metric(f"{function_name}.duration", duration)
         self.record_metric(f"{function_name}.success", 1 if success else 0)
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get comprehensive statistics."""
         uptime = datetime.now() - self.start_time
 
@@ -128,21 +130,29 @@ class MetricsCollector:
 
         return stats
 
-    def get_health_status(self) -> Dict[str, Any]:
+    def get_health_status(self) -> dict[str, Any]:
         """Get application health status."""
         stats = self.get_stats()
 
-        # Determine health based on error rates
         overall_health = "healthy"
         issues = []
 
+        # prioridade: unhealthy > degraded > healthy
+        def worse(a: str, b: str) -> str:
+            order = {"healthy": 0, "degraded": 1, "unhealthy": 2}
+            return a if order[a] >= order[b] else b
+
         for func_name, func_stats in stats["functions"].items():
             error_rate = 100 - func_stats["success_rate"]
-            if error_rate > 10:  # More than 10% error rate
-                overall_health = "degraded"
+            status = "healthy"
+            if error_rate > 25:
+                status = "unhealthy"
+            elif error_rate > 10:
+                status = "degraded"
+
+            overall_health = worse(overall_health, status)
+            if error_rate > 0:
                 issues.append(f"{func_name}: {error_rate:.1f}% error rate")
-            elif error_rate > 25:  # More than 25% error rate
-                overall_health = "unhealthy"
 
         return {
             "status": overall_health,
@@ -153,7 +163,7 @@ class MetricsCollector:
         }
 
 
-def track_execution_time(func_name: Optional[str] = None):
+def track_execution_time(func_name: str | None = None):
     """
     Decorator to track function execution time and success rate.
 
