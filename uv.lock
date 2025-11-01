@@ -958,7 +958,7 @@ wheels = [
 
 [[package]]
 name = "notion-backend-vercel"
-version = "0.1.0"
+version = "1.0.0"
 source = { virtual = "." }
 dependencies = [
     { name = "aiohttp" },
