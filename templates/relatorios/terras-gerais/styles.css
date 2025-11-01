@@ -24,9 +24,33 @@ body {
     font-size: 14px;
 }
 
-/* Configuração de página para PDF - tamanho aumentado */
+/* Configuração de página para PDF - tamanho A3 (retrato) */
 @page {
-    size: A3;
+    size: A3 portrait;
+    margin: 1.5cm;
+}
+
+/* Pré-visualização em tela: centralizar página e evitar ocupar toda a largura */
+@media screen {
+    html { background: #f3f4f6; }
+
+    /* A3 (retrato) como padrão atual */
+    body.page-a3 {
+        width: 297mm;
+        margin: 10mm auto;
+        background: #fff;
+        box-shadow: 0 0 0 1px #e5e7eb, 0 10px 30px rgba(0,0,0,.08);
+        overflow-x: hidden;
+    }
+
+    /* Alternativa A4 (caso necessário em outras templates) */
+    body.page-a4 {
+        width: 210mm;
+        margin: 10mm auto;
+        background: #fff;
+        box-shadow: 0 0 0 1px #e5e7eb, 0 10px 30px rgba(0,0,0,.08);
+        overflow-x: hidden;
+    }
 }
 
 /* Cabeçalho */
@@ -310,9 +334,8 @@ body {
         max-height: 300px !important;
         
         /* Compress images in PDF */
-        -webkit-print-color-adjust: economy;
-        print-color-adjust: economy;
-        color-adjust: economy;
+    -webkit-print-color-adjust: economy;
+    print-color-adjust: economy;
     }
     
     .gallery-image {
@@ -324,8 +347,7 @@ body {
     
     /* Reduce overall quality to save space */
     * {
-        -webkit-print-color-adjust: economy;
-        print-color-adjust: economy;
-        color-adjust: economy;
+    -webkit-print-color-adjust: economy;
+    print-color-adjust: economy;
     }
 }
