@@ -1,9 +1,11 @@
 import logging
 from pathlib import Path
+
 from fastapi import HTTPException, Query
 from fastapi.responses import HTMLResponse
 
-from services.report_generator import ReportGenerator
+from services.report.generator import ReportGenerator
+
 
 logger = logging.getLogger(__name__)
 

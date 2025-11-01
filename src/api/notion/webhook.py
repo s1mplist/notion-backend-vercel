@@ -2,11 +2,13 @@ import asyncio
 import json
 import logging
 from datetime import datetime
-from fastapi import Request, HTTPException
+
+from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from models import WebhookRequest, GenerationMetadata
 from get_data import process_webhook_data
+from models import GenerationMetadata, WebhookRequest
+
 
 logger = logging.getLogger(__name__)
 

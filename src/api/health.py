@@ -1,17 +1,23 @@
 import logging
 import os
 import sys
-import psutil
-from datetime import datetime, timezone
-from typing import Dict, Any
+
+
+try:
+    import psutil  # type: ignore
+except ImportError:
+    psutil = None  # health check seguirá sem métricas de sistema
+from datetime import UTC, datetime
+from typing import Any
+
 
 logger = logging.getLogger(__name__)
 
 # Armazena o timestamp de quando o serviço iniciou
-SERVICE_START_TIME = datetime.now(timezone.utc)
+SERVICE_START_TIME = datetime.now(UTC)
 
 
-async def health_check() -> Dict[str, Any]:
+async def health_check() -> dict[str, Any]:
     """
     Comprehensive health check endpoint with detailed system information.
 
@@ -20,7 +26,7 @@ async def health_check() -> Dict[str, Any]:
     """
     logger.info("Comprehensive health check requested")
 
-    current_time = datetime.now(timezone.utc)
+    current_time = datetime.now(UTC)
     uptime_seconds = (current_time - SERVICE_START_TIME).total_seconds()
 
     # System metrics
@@ -28,7 +34,7 @@ async def health_check() -> Dict[str, Any]:
     memory_info = process.memory_info()
     cpu_percent = process.cpu_percent(interval=0.1)
 
-    return {
+    info: dict[str, Any] = {
         "status": "healthy",
         "timestamp": current_time.isoformat(),
         "uptime": {
@@ -57,6 +63,15 @@ async def health_check() -> Dict[str, Any]:
             "disk": {"usage_percent": round(psutil.disk_usage("/").percent, 2)},
         },
     }
+
+    if psutil:
+        p = psutil.Process(os.getpid())
+        info["memory_mb"] = round(p.memory_info().rss / (1024 * 1024), 1)
+        info["cpu_percent"] = psutil.cpu_percent(interval=None)
+    else:
+        info["system_metrics"] = "psutil not installed"
+
+    return info
 
 
 def _format_uptime(seconds: float) -> str:

@@ -1,15 +1,18 @@
-import sys
 import asyncio
 import logging
+import sys
 from datetime import datetime
-from fastapi import FastAPI, HTTPException
 
-from core.config import settings
+from fastapi import FastAPI, HTTPException
 
 # FastAPI Routes
 from api.health import health_check
 from api.notion.webhook import webhook
-from api.relatorios import report_html_preview, report_by_template
+from api.relatorios import report_by_template, report_html_preview
+
+# Config
+from core.config import settings
+
 
 try:
     if sys.platform == "win32":
