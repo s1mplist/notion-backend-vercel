@@ -1,15 +1,15 @@
 """HTML manipulation utilities."""
 
 import base64
-import mimetypes
 import logging
+import mimetypes
 from pathlib import Path
-from typing import Optional
+
 
 logger = logging.getLogger(__name__)
 
 
-def data_uri_for_local_image(template_dir: Path, rel_path: str) -> Optional[str]:
+def data_uri_for_local_image(template_dir: Path, rel_path: str) -> str | None:
     """Convert local image to data URI for embedding in HTML.
 
     Args:

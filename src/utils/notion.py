@@ -1,7 +1,7 @@
-import unicodedata
 import re
+import unicodedata
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import Any
 
 
 def normalize_prop_name(name: str) -> str:
@@ -21,14 +21,14 @@ def normalize_prop_name(name: str) -> str:
     return s
 
 
-def extract_text(rich_text_list: List[Dict[str, Any]]) -> str:
+def extract_text(rich_text_list: list[dict[str, Any]]) -> str:
     """Extract text from Notion's rich_text format"""
     if not rich_text_list:
         return ""
     return " ".join(text.get("text", {}).get("content", "") for text in rich_text_list)
 
 
-def extract_date(date_obj: Dict[str, Any]) -> datetime:
+def extract_date(date_obj: dict[str, Any]) -> datetime:
     """Convert Notion date to datetime"""
     if not date_obj or "start" not in date_obj:
         return datetime.now()

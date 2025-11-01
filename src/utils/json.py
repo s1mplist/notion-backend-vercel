@@ -1,9 +1,9 @@
 """JSON serialization utilities for handling common non-serializable types."""
 
 import json
-from datetime import datetime, date
-from uuid import UUID
+from datetime import date, datetime
 from typing import Any
+from uuid import UUID
 
 
 def json_default_handler(obj: Any) -> str:
