@@ -1,17 +1,20 @@
 {
-  "routes": [
+  "builds": [
     {
-      "src": "/api/(.*)",
-      "dest": "api/index.py"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "api/index.py"
+      "src": "src/main.py",
+      "use": "@vercel/python",
+      "config": {
+        "maxLambdaSize": "15mb"
+      }
     }
   ],
-  "build": {
-    "env": {
-      "PYTHONPATH": "./src"
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "src/main.py"
     }
+  ],
+  "env": {
+    "PYTHONPATH": "src"
   }
 }
