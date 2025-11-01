@@ -21,11 +21,13 @@ Setup:
 """
 
 import logging
-from typing import Dict, Optional, Any
+from typing import Any
+
 from notion_client import AsyncClient
 
 from core.config import settings
-from utils.notion_utils import extract_text
+from utils.notion import extract_text
+
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +43,7 @@ class MetadataService:
         )
         self.plots_db_id = getattr(settings, "notion_plots_database_id", None)
 
-    async def get_farm_by_name(self, farm_name: str) -> Optional[Dict[str, Any]]:
+    async def get_farm_by_name(self, farm_name: str) -> dict[str, Any] | None:
         """
         Get farm metadata by name.
 
@@ -91,7 +93,7 @@ class MetadataService:
 
     async def get_consultant_by_name(
         self, consultant_name: str
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Get consultant metadata by name.
 
@@ -131,7 +133,7 @@ class MetadataService:
 
     async def get_plot_metadata(
         self, plot_name: str, farm_name: str = None
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Get plot metadata by name and optionally farm.
 
@@ -155,7 +157,7 @@ class MetadataService:
         try:
             async with AsyncClient(auth=self.token) as notion:
                 # Build filter
-                filter_config: Dict[str, Any] = {
+                filter_config: dict[str, Any] = {
                     "property": "Nome",
                     "title": {
                         "contains": plot_name
@@ -233,7 +235,7 @@ class MetadataService:
 
         return report_data
 
-    def _parse_farm_properties(self, props: Dict[str, Any]) -> Dict[str, Any]:
+    def _parse_farm_properties(self, props: dict[str, Any]) -> dict[str, Any]:
         """Parse Notion farm properties into a clean dictionary."""
         return {
             "id": props.get("id"),
@@ -245,7 +247,7 @@ class MetadataService:
             # Add more fields as needed
         }
 
-    def _parse_consultant_properties(self, props: Dict[str, Any]) -> Dict[str, Any]:
+    def _parse_consultant_properties(self, props: dict[str, Any]) -> dict[str, Any]:
         """Parse Notion consultant properties into a clean dictionary."""
         return {
             "id": props.get("id"),
@@ -254,7 +256,7 @@ class MetadataService:
             "phone": extract_text(props.get("Telefone", {}).get("rich_text", [])),
         }
 
-    def _parse_plot_properties(self, props: Dict[str, Any]) -> Dict[str, Any]:
+    def _parse_plot_properties(self, props: dict[str, Any]) -> dict[str, Any]:
         """Parse Notion plot properties into a clean dictionary."""
         # Get area (can be number or rich_text)
         area = 0.0

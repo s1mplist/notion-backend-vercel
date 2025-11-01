@@ -3,17 +3,24 @@ Service for generating complete reports by combining Notion data sources.
 """
 
 import logging
-from typing import Dict, Any, List
+import re
 from datetime import datetime
+from typing import Any
 
-from models.report import Report, Plot, Image
-from utils.notion_utils import extract_text
-from services.notion.notion_service import NotionService
-from services.plot_data_extractor import PlotDataExtractor
+from notion_client import AsyncClient
+
+from core.config import settings
+from models.report import Image, Plot, Report
+from services.data.plot_data import PlotDataExtractor
+from services.html.render import HTMLRenderer
 from services.notion.mapper import NotionDataMapper
-from services.html_renderer import HTMLRenderer
+from services.notion.notion_service import NotionService
+from utils.notion import extract_text
+
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_HARVEST_PERIOD = getattr(settings, "default_harvest_period", "2025/2026")
 
 
 class ReportGenerator:
@@ -25,7 +32,7 @@ class ReportGenerator:
         self.data_mapper = NotionDataMapper()
         self.html_renderer = HTMLRenderer()
 
-    async def generate_complete_report(self, page_id: str) -> Dict[str, Any]:
+    async def generate_complete_report(self, page_id: str) -> dict[str, Any]:
         """
         Generate a complete report combining FACT data and plot information.
 
@@ -59,6 +66,7 @@ class ReportGenerator:
             farm_name = await self._resolve_farm_name(farm_ids)
 
             # 6. Get original page data (for plots with images)
+            # NotionService.get_page is synchronous; no await here
             page_data = self.notion_service.get_page(page_id)
             plots_with_images = await self.plot_extractor.extract_plots_data(page_id)
 
@@ -96,7 +104,7 @@ class ReportGenerator:
 
     async def generate_report_with_template(
         self, page_id: str, template_slug: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Generate a complete report and render it using a specific template bundle under
         templates/relatorios/{template_slug}.
@@ -172,13 +180,10 @@ class ReportGenerator:
     async def _get_data_sources(self) -> tuple[str, str]:
         """Get FACT and Talhões data source IDs."""
         # Get database IDs from environment or configuration
-        fact_db_id = "29c4eaab90d28015a00fe7e0faaa5c22"
-        talhoes_db_id = "29b4eaab90d280d594e9d765abf12e59"
+        fact_db_id = settings.notion_fact_id
+        talhoes_db_id = settings.notion_talhoes_id
 
         # Retrieve data source IDs
-        from notion_client import AsyncClient
-        from core.config import settings
-
         async with AsyncClient(auth=settings.notion_token) as notion:
             fact_db = await notion.databases.retrieve(database_id=fact_db_id)
             fact_ds_id = fact_db["data_sources"][0]["id"]
@@ -188,11 +193,8 @@ class ReportGenerator:
 
         return fact_ds_id, talhoes_ds_id
 
-    async def _query_fact_data(self, fact_ds_id: str, page_id: str) -> List[Dict]:
+    async def _query_fact_data(self, fact_ds_id: str, page_id: str) -> list[dict]:
         """Query FACT data source for specific page."""
-        from notion_client import AsyncClient
-        from core.config import settings
-
         query = {
             "filter": {
                 "property": "title",
@@ -206,11 +208,9 @@ class ReportGenerator:
         return self._parse_data_source_results(result)
 
     async def _query_talhoes_data(
-        self, talhoes_ds_id: str, farm_ids: List[str]
-    ) -> List[Dict]:
+        self, talhoes_ds_id: str, farm_ids: list[str]
+    ) -> list[dict]:
         """Query Talhões data source for all farms."""
-        from notion_client import AsyncClient
-        from core.config import settings
 
         all_talhoes = []
 
@@ -225,7 +225,7 @@ class ReportGenerator:
 
         return all_talhoes
 
-    def _parse_data_source_results(self, result: Dict) -> List[Dict]:
+    def _parse_data_source_results(self, result: dict) -> list[dict]:
         """Parse data source query results."""
         items = []
         for page in result.get("results", []):
@@ -321,22 +321,19 @@ class ReportGenerator:
         logger.debug(f"Parsed {len(items)} items from data source")
         return items
 
-    def _extract_farm_ids(self, fact_item: Dict) -> List[str]:
+    def _extract_farm_ids(self, fact_item: dict) -> list[str]:
         """Extract farm IDs from FACT item."""
         farm_ids = fact_item.get("farm", [])
         if not isinstance(farm_ids, list):
             farm_ids = [farm_ids] if farm_ids else []
         return [fid for fid in farm_ids if fid]
 
-    async def _resolve_farm_name(self, farm_ids: List[str]) -> str:
+    async def _resolve_farm_name(self, farm_ids: list[str]) -> str:
         """Resolve farm name from farm ID."""
         if not farm_ids:
             return ""
 
         try:
-            from notion_client import AsyncClient
-            from core.config import settings
-
             async with AsyncClient(auth=settings.notion_token) as notion:
                 page = await notion.pages.retrieve(page_id=farm_ids[0])
                 properties = page.get("properties", {})
@@ -353,48 +350,83 @@ class ReportGenerator:
         return ""
 
     def _merge_plot_data(
-        self, talhoes_data: List[Dict], plots_with_images: List[Dict]
-    ) -> List[Plot]:
+        self, talhoes_data: list[dict], plots_with_images: list[dict]
+    ) -> list[Plot]:
         """
         Merge talhões metadata with plot images.
 
         Args:
-            talhoes_data: List of talhão metadata (name, area, etc.)
-            plots_with_images: List of plots with images from page properties
+            talhoes_data: List of talhão metadata (name, area, etc.) - includes page_id from Notion
+            plots_with_images: List of plots with images from page properties - includes talhao_page_id
 
         Returns:
             List of Plot objects with complete data
         """
         merged_plots = []
 
-        # Create a map of plot names to their image data
-        images_map = {}
+        # Create a map using talhao ID (talhao_1, talhao_2, etc.) - most reliable approach
+        # This matches the 'id' field from PlotDataExtractor with 'id_talhao' from data source
+        images_map_by_talhao_id = {}
+        # Keep name-based map as fallback
+        images_map_by_name = {}
+
         for plot in plots_with_images:
+            # Map by talhao ID (e.g., "talhao_1", "talhao_2")
+            talhao_id = plot.get(
+                "id"
+            )  # From PlotDataExtractor: "talhao_1", "talhao_2", etc.
+            if talhao_id:
+                images_map_by_talhao_id[talhao_id] = plot
+
+            # Also map by name as fallback
             plot_names = plot.get("name", [])
             if plot_names:
                 for name in plot_names:
-                    images_map[name] = plot
+                    images_map_by_name[name] = plot
 
-        # Merge talhões data with images
+        logger.debug(
+            f"Images mapped by talhao_id: {list(images_map_by_talhao_id.keys())}"
+        )
+        logger.debug(f"Images mapped by name: {list(images_map_by_name.keys())}")
+
+        # Merge talhões data with images - prioritize talhao_id matching
+
+        # Ordena os talhões por índice numérico de id_talhao (talhao_1, talhao_2, ...)
+        def _talhao_index(t: dict) -> int:
+            tid = str(t.get("id_talhao", ""))
+            m = re.search(r"(\d+)", tid)
+            return int(m.group(1)) if m else 10_000
+
+        talhoes_data = sorted(talhoes_data, key=_talhao_index)
+
+        # Cria um set de IDs válidos dos talhões da fazenda
+        valid_talhao_ids = set()
         for talhao in talhoes_data:
-            # Extract talhão name from id_talhao (title) or nome_talhao (rich_text)
+            tid = talhao.get("id_talhao", "")
+            if tid:
+                valid_talhao_ids.add(tid)
+
+        for idx, talhao in enumerate(talhoes_data):
             talhao_id = talhao.get("id_talhao", "")
             talhao_name = talhao.get("nome_talhao", "") or talhao_id
             area = talhao.get("area", 0.0) or 0.0
-
-            # Normalize area: handle Brazilian decimal format (13,02 -> 13.02)
             if isinstance(area, str):
-                area = area.replace(",", ".")
-
+                area = area.strip().replace(",", ".")
             try:
                 area_float = float(area)
             except (ValueError, TypeError):
                 area_float = 0.0
 
-            # Find matching plot with images
-            image_data = images_map.get(talhao_name, {})
+            # Só considera imagens de plots que correspondam ao talhão da fazenda
+            image_data = {}
+            if talhao_id and talhao_id in images_map_by_talhao_id:
+                image_data = images_map_by_talhao_id[talhao_id]
+                logger.debug("Matched talhão '%s' by ID: %s", talhao_name, talhao_id)
+            elif talhao_name in images_map_by_name:
+                image_data = images_map_by_name[talhao_name]
+                logger.debug("Matched talhão '%s' by name", talhao_name)
+            # Não faz fallback por posição para evitar misturar fazendas
 
-            # Extract images
             images = []
             for img in image_data.get("images", []):
                 images.append(
@@ -403,32 +435,47 @@ class ReportGenerator:
                     )
                 )
 
-            # Create Plot object
-            plot = Plot(
-                id=talhao_name,
-                area=area_float,
-                growth_stage=image_data.get("growth_stage", [""])[0]
-                if image_data.get("growth_stage")
-                else "",
-                crop=talhao.get("cultura", "") or "",
-                variety=talhao.get("variedade", "") or "",
-                images=images,
-                additional_images="",
-                assessment=image_data.get("assessment", [""])[0]
-                if image_data.get("assessment")
-                else "",
+            # Extract assessment text (used to decide if plot was evaluated)
+            assessment_text = (
+                (image_data.get("assessment") or [""])[0].strip()
+                if isinstance(image_data.get("assessment"), list)
+                else str(image_data.get("assessment") or "").strip()
             )
-            merged_plots.append(plot)
+
+            # Only include plots that were actually evaluated (have an assessment response)
+            if assessment_text:
+                # Normalize optional additional_images field for model compatibility
+                additional_images_val = image_data.get("additional_images")
+                if isinstance(additional_images_val, list):
+                    additional_images_val = (
+                        ", ".join([str(x) for x in additional_images_val if x]) or None
+                    )
+                elif additional_images_val is not None:
+                    additional_images_val = str(additional_images_val).strip() or None
+
+                plot = Plot(
+                    id=talhao_name,
+                    area=area_float,
+                    growth_stage=image_data.get("growth_stage", [""])[0]
+                    if image_data.get("growth_stage")
+                    else "",
+                    crop=talhao.get("cultura", "") or "",
+                    variety=talhao.get("variedade", "") or "",
+                    images=images,
+                    additional_images=additional_images_val,
+                    assessment=assessment_text,
+                )
+                merged_plots.append(plot)
 
         return merged_plots
 
     def _build_report_model(
         self,
-        fact_item: Dict,
-        page_data: Dict,
-        plots: List[Plot],
+        fact_item: dict,
+        page_data: dict,
+        plots: list[Plot],
         farm_name: str,
-        talhoes_data: List[Dict] = None,
+        talhoes_data: list[dict] = None,
     ) -> Report:
         """Build complete Report model from all data sources."""
 
@@ -462,8 +509,6 @@ class ReportGenerator:
         except (ValueError, TypeError):
             next_visit_date = datetime.now()
 
-        # Get metadata from talhões (preferred) or fallback to fact_item
-        # Talhões have rollup data that's more reliable
         if talhoes_data and len(talhoes_data) > 0:
             first_talhao = talhoes_data[0]
 
@@ -476,6 +521,7 @@ class ReportGenerator:
                 f"FACT item consultor raw value: '{fact_item.get('consultor')}' (type: {type(fact_item.get('consultor')).__name__})"
             )
 
+            # PRIORIDADE: Talhões contêm os metadados corretos
             owner_name = first_talhao.get("proprietario", "") or fact_item.get(
                 "proprietario", ""
             )
@@ -484,13 +530,14 @@ class ReportGenerator:
             )
             farm_city = first_talhao.get("cidade", "") or fact_item.get("cidade", "")
             farm_name = (
-                first_talhao.get("nome_fazenda", "")
+                first_talhao.get("fazenda_nome", "")
+                or first_talhao.get("nome_fazenda", "")
                 or farm_name
                 or fact_item.get("fazenda_nome", "")
             )
 
             logger.debug(
-                f"Using talhão metadata: consultor='{consultant_name}', "
+                f"Using talhão metadata: consultor='{consultant_name}' (from FACT), "
                 f"proprietario='{owner_name}', cidade='{farm_city}', fazenda='{farm_name}'"
             )
         else:
@@ -508,10 +555,11 @@ class ReportGenerator:
         return Report(
             farm_name=farm_name,
             consultant_name=consultant_name,
-            report_month=datetime.now().strftime("%B %Y"),
+            report_month=current_visit_date.strftime("%B %Y"),
             owner_name=owner_name,
             farm_city=farm_city,
-            harvest_period=fact_item.get("safra", "2025/2026") or "2025/2026",
+            harvest_period=fact_item.get("safra", DEFAULT_HARVEST_PERIOD)
+            or DEFAULT_HARVEST_PERIOD,
             general_info=general_info,
             next_visit_date=next_visit_date,
             current_visit_date=current_visit_date,

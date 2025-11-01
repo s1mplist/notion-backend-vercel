@@ -1,12 +1,15 @@
-import logging
+import asyncio
 import hashlib
+import logging
+import os
 from datetime import datetime
 from pathlib import Path
-from jinja2 import Environment, FileSystemLoader
 
-from models.report import Report
+from jinja2 import Environment, FileSystemLoader, TemplateNotFound, select_autoescape
+
 from core.config import settings
-from utils.html_utils import inline_assets
+from models.report import Report
+from utils.html import inline_assets
 
 
 logger = logging.getLogger(__name__)
@@ -19,25 +22,28 @@ class HTMLRenderer:
     This class handles the rendering of HTML content from Report data using
     the templates in the template/ directory. The rendered HTML can then be
     sent to any PDF service (Bannerbear, PDFShift, etc.).
+
+    Optionally, attempts to load a legacy template ('report_template.html') if present;
+    if not found, this is handled gracefully with exception handling.
     """
 
-    def __init__(self):
-        repo_root = Path(__file__).resolve().parents[2]
-        # Default templates root (used for legacy renderer)
-        self.templates_root = repo_root / "templates"
-
-        # Legacy environment (kept for backward compatibility with report_template.html)
+    def __init__(self) -> None:
+        templates_dir = self._locate_templates_dir()
+        self.templates_root = templates_dir  # Define templates_root for use elsewhere
         self.env = Environment(
-            loader=FileSystemLoader(str(self.templates_root)),
+            loader=FileSystemLoader(str(templates_dir)),
+            autoescape=select_autoescape(["html", "xml"]),
+            trim_blocks=True,
+            lstrip_blocks=True,
             enable_async=True,
-            auto_reload=False,
-            cache_size=100,
         )
+        # Keep compatibility with current path structure
+        self.template_name = "relatorios/terras-gerais/template.html"
 
         # Load legacy template if present (optional)
         try:
             self.report_template = self.env.get_template("report_template.html")
-        except Exception:
+        except TemplateNotFound:
             self.report_template = None
 
         # Default styles for legacy rendering
@@ -46,6 +52,48 @@ class HTMLRenderer:
         # Audit logging configuration
         self._enable_html_audit = settings.enable_html_audit
         self._html_audit_max_chars = settings.html_audit_max_chars
+
+    def _locate_templates_dir(self) -> Path:
+        """Locate the templates/ directory robustly (dev and server).
+
+        Resolution order:
+        1) Environment variable TEMPLATES_DIR (if set and exists)
+        2) Optional settings.templates_dir (if present and exists)
+        3) Walk up from this file and pick the first '<parent>/templates' that exists
+        4) Current working directory 'templates' (if exists)
+
+        Raises FileNotFoundError if not found.
+        """
+        # 1) Environment override
+        env_dir = os.getenv("TEMPLATES_DIR")
+        if env_dir:
+            p = Path(env_dir).resolve()
+            if p.is_dir():
+                return p
+
+        # 2) Settings override (optional attr)
+        cfg_dir = getattr(settings, "templates_dir", None)
+        if cfg_dir:
+            p = Path(str(cfg_dir)).resolve()
+            if p.is_dir():
+                return p
+
+        # 3) Search parents for a 'templates' directory
+        here = Path(__file__).resolve()
+        for parent in [here] + list(here.parents):
+            candidate = (parent / "templates").resolve()
+            if candidate.is_dir():
+                return candidate
+
+        # 4) CWD fallback
+        cwd_candidate = (Path.cwd() / "templates").resolve()
+        if cwd_candidate.is_dir():
+            return cwd_candidate
+
+        raise FileNotFoundError(
+            f"Templates directory not found. Tried TEMPLATES_DIR, settings.templates_dir,"
+            f" parents of {here}, and {cwd_candidate}"
+        )
 
     def _read_styles(self, base_dir: Path) -> str:
         """Read the CSS file and return its contents."""
@@ -66,7 +114,7 @@ class HTMLRenderer:
         Returns:
             Complete HTML string ready for PDF conversion
         """
-        # Use report data as-is (no image optimization)
+        # Usa dados como estão (sem otimização de imagem)
         next_visit = getattr(report_data, "next_visit_date", None)
         current_visit = getattr(report_data, "current_visit_date", None)
 
@@ -82,24 +130,13 @@ class HTMLRenderer:
             "current_visit_date": current_visit.strftime("%d/%m/%Y")
             if current_visit
             else "",
-            "operations_schedule": getattr(report_data, "operations_schedule", ""),
-            "plots": getattr(report_data, "plots", []) or [],
+            "plots": getattr(report_data, "plots", []),
         }
 
-        if not self.report_template:
-            raise RuntimeError(
-                "Legacy report_template.html not found. Use render_template_slug for dynamic templates."
-            )
-
-        # Use async template rendering (legacy)
-        html = await self.report_template.render_async(**context)
-        final_html = inline_assets(html, self.templates_root, self._styles)
-
-        # Log HTML for audit
-        if self._enable_html_audit:
-            self._log_html_audit(final_html, context, report_data)
-
-        return final_html
+        # renderização (antes usava Environment implícito)
+        template = self.env.get_template(self.template_name)
+        html = await template.render_async(**context)
+        return html
 
     def render_report_html_sync(self, report_data: Report) -> str:
         """
@@ -111,8 +148,6 @@ class HTMLRenderer:
         Returns:
             Complete HTML string ready for PDF conversion
         """
-        import asyncio
-
         return asyncio.run(self.render_report_html(report_data))
 
     async def render_template_slug(
@@ -140,11 +175,15 @@ class HTMLRenderer:
             )
 
         # Build a dedicated Jinja environment rooted at the template bundle directory
+        auto_reload = getattr(settings, "jinja_auto_reload", True)
         env = Environment(
             loader=FileSystemLoader(str(base_dir)),
             enable_async=True,
-            auto_reload=False,
+            auto_reload=auto_reload,
             cache_size=100,
+            autoescape=select_autoescape(["html", "xml"]),
+            trim_blocks=True,
+            lstrip_blocks=True,
         )
 
         template = env.get_template("template.html")
@@ -319,5 +358,3 @@ class HTMLRenderer:
             total_images,
             "; ".join(plot_names),
         )
-
-    # Note: image optimization intentionally removed per requirements

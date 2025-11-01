@@ -1,12 +1,13 @@
 from datetime import datetime
-from typing import Dict, Any, List
-from models.report import Report, Plot, Image
-from utils.notion_utils import extract_text
+from typing import Any
+
+from models.report import Image, Plot, Report
+from utils.notion import extract_text
 
 
 class NotionDataMapper:
     @staticmethod
-    def filter_properties(properties: Dict[str, Any]) -> Dict[str, Any]:
+    def filter_properties(properties: dict[str, Any]) -> dict[str, Any]:
         """Return a new dict containing only Notion properties that have a meaningful value.
 
         This helps downstream mapping code ignore empty fields and simplifies templates.
@@ -14,7 +15,7 @@ class NotionDataMapper:
         if not properties:
             return {}
 
-        def has_value(prop: Dict[str, Any]) -> bool:
+        def has_value(prop: dict[str, Any]) -> bool:
             if not prop:
                 return False
             prop_type = prop.get("type") or ""
@@ -46,7 +47,7 @@ class NotionDataMapper:
 
             # Checkbox: consider only when True
             if prop_type == "checkbox":
-                return bool(val) is True
+                return val is True
 
             # Select-like and single-value fields
             if prop_type in (
@@ -66,7 +67,7 @@ class NotionDataMapper:
             # Fallback: consider truthiness
             return bool(val)
 
-        filtered: Dict[str, Any] = {}
+        filtered: dict[str, Any] = {}
         for k, v in properties.items():
             try:
                 if has_value(v):
@@ -79,7 +80,7 @@ class NotionDataMapper:
         return filtered
 
     @staticmethod
-    def extract_images(files: List[Dict[str, Any]]) -> List[Image]:
+    def extract_images(files: list[dict[str, Any]]) -> list[Image]:
         """Extract images from Notion's files property"""
         images = []
         for file in files:
@@ -94,21 +95,21 @@ class NotionDataMapper:
     # normalize_prop_name, extract_text, extract_date agora estão em src.utils.notion_utils
 
     @classmethod
-    def map_plot(cls, plot_data: Dict[str, Any]) -> Plot:
+    def map_plot(cls, plot_data: dict[str, Any]) -> Plot:
         """Map Notion page data to Plot model"""
         return Plot(
             id=plot_data.get("id", ""),
-            area=0.0,  # Área será preenchida posteriormente se necessário
+            area=0.0,  # Area will be filled later if necessary
             growth_stage=plot_data.get("growth_stage", [""])[0]
             if plot_data.get("growth_stage")
             else "",
             crop=plot_data.get("name", [""])[0] if plot_data.get("name") else "",
-            variety="",  # Variedade será preenchida posteriormente se necessário
+            variety="",  # Variety will be filled in later if necessary
             images=[
                 Image(url=img.get("url", ""), description="")
                 for img in plot_data.get("images", [])
             ],
-            additional_images="",
+            additional_images=[],
             assessment=plot_data.get("assessment", [""])[0]
             if plot_data.get("assessment")
             else "",
@@ -116,7 +117,7 @@ class NotionDataMapper:
 
     @classmethod
     def map_to_report(
-        cls, notion_data: Dict[str, Any], plots_data: List[Dict[str, Any]]
+        cls, notion_data: dict[str, Any], plots_data: list[dict[str, Any]]
     ) -> Report:
         """Map Notion data to Report model (ignore empty fields)"""
         props = notion_data.get("properties", {})
@@ -155,10 +156,10 @@ class NotionDataMapper:
         return Report(
             farm_name="",  # Será preenchido posteriormente
             consultant_name="",  # Será preenchido posteriormente
-            report_month=datetime.now().strftime("%B %Y"),
+            report_month=current_visit_date.strftime("%B %Y"),
             owner_name="",  # Será preenchido posteriormente
             farm_city="",  # Será preenchido posteriormente
-            harvest_period="2025/2026",  # Valor padrão ou será preenchido posteriormente
+            harvest_period="2025/2026",  # Default value or will be filled in later
             general_info=informacoes,
             next_visit_date=next_visit_date,
             current_visit_date=current_visit_date,

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+import logging
+from typing import Any
 
 from notion_client import Client
+
 from core.config import settings
 
 
@@ -20,16 +22,16 @@ class NotionService:
         db = self.client.databases.retrieve(database_id)
         ds_list = db.get("data_sources") or []
         if not ds_list:
-            raise RuntimeError(f"Database {database_id} não possui data_sources.")
+            raise RuntimeError(f"Database {database_id} does not have data_sources.")
         return ds_list[0]["id"]
 
     def query_data_source(
-        self, data_source_id: str, query: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, data_source_id: str, query: dict[str, Any]
+    ) -> dict[str, Any]:
         """Execute a query on a data source."""
         return self.client.data_sources.query(data_source_id, **query)
 
-    def get_fact_and_talhoes_data_sources(self) -> Tuple[str, str]:
+    def get_fact_and_talhoes_data_sources(self) -> tuple[str, str]:
         """Get data source IDs for FACT and Talhões databases."""
         fact_ds_id = self.get_data_source_id(settings.notion_fact_database_id)
         talhoes_ds_id = self.get_data_source_id(settings.notion_talhoes_database_id)
@@ -38,14 +40,14 @@ class NotionService:
     # -----------------------
     # Page Operations
     # -----------------------
-    def get_page(self, page_id: str) -> Dict[str, Any]:
+    def get_page(self, page_id: str) -> dict[str, Any]:
         """Retrieve a single page by ID."""
         return self.client.pages.retrieve(page_id)
 
-    def get_page_blocks(self, block_id: str) -> List[Dict[str, Any]]:
+    def get_page_blocks(self, block_id: str) -> list[dict[str, Any]]:
         """Retrieve all child blocks for a given page or block (paginated)."""
-        results: List[Dict[str, Any]] = []
-        start_cursor: Optional[str] = None
+        results: list[dict[str, Any]] = []
+        start_cursor: str | None = None
         while True:
             resp = self.client.blocks.children.list(
                 block_id=block_id, start_cursor=start_cursor
@@ -58,17 +60,17 @@ class NotionService:
                 break
         return results
 
-    def get_pages(self, page_ids: List[str]) -> List[Dict[str, Any]]:
+    def get_pages(self, page_ids: list[str]) -> list[dict[str, Any]]:
         """Retrieve multiple pages by IDs."""
         pages = []
         for pid in page_ids:
             try:
                 pages.append(self.get_page(pid))
             except Exception as exc:
-                print(f"Falha ao obter página {pid}: {exc}")
+                logging.error(f"Falha ao obter página {pid}: {exc}")
         return pages
 
-    def resolve_page_title(self, page_id: str) -> Optional[str]:
+    def resolve_page_title(self, page_id: str) -> str | None:
         """Get the title property value from a page."""
         try:
             page = self.get_page(page_id)
@@ -83,32 +85,32 @@ class NotionService:
     # -----------------------
     # Property Extractors
     # -----------------------
-    def _plain_text(self, rich: List[Dict[str, Any]]) -> str:
+    def _plain_text(self, rich: list[dict[str, Any]]) -> str:
         """Extract plain text from rich text array."""
         return "".join((t.get("plain_text") or "") for t in (rich or []))
 
-    def _extract_title(self, prop: Dict[str, Any]) -> str:
+    def _extract_title(self, prop: dict[str, Any]) -> str:
         return self._plain_text(prop.get("title") or [])
 
-    def _extract_rich_text(self, prop: Dict[str, Any]) -> str:
+    def _extract_rich_text(self, prop: dict[str, Any]) -> str:
         return self._plain_text(prop.get("rich_text") or [])
 
-    def _extract_relation_ids(self, prop: Dict[str, Any]) -> List[str]:
+    def _extract_relation_ids(self, prop: dict[str, Any]) -> list[str]:
         rel = prop.get("relation") or []
         return [r.get("id", "").replace("-", "") for r in rel if r.get("id")]
 
-    def _extract_select(self, prop: Dict[str, Any]) -> Optional[str]:
+    def _extract_select(self, prop: dict[str, Any]) -> str | None:
         sel = prop.get("select")
         return sel["name"] if sel else None
 
-    def _extract_multi_select(self, prop: Dict[str, Any]) -> List[str]:
+    def _extract_multi_select(self, prop: dict[str, Any]) -> list[str]:
         return [s["name"] for s in (prop.get("multi_select") or [])]
 
-    def _extract_date(self, prop: Dict[str, Any]) -> Dict[str, Optional[str]]:
+    def _extract_date(self, prop: dict[str, Any]) -> dict[str, str | None]:
         d = prop.get("date") or {}
         return {"start": d.get("start"), "end": d.get("end")}
 
-    def _extract_files(self, prop: Dict[str, Any]) -> List[str]:
+    def _extract_files(self, prop: dict[str, Any]) -> list[str]:
         files = []
         for f in prop.get("files") or []:
             if f.get("type") == "file":
@@ -117,7 +119,7 @@ class NotionService:
                 files.append(f["external"]["url"])
         return files
 
-    def _simplify_property(self, prop: Dict[str, Any]) -> Any:
+    def _simplify_property(self, prop: dict[str, Any]) -> Any:
         """Convert a Notion property to a simplified value."""
         ptype = prop.get("type")
         if ptype == "title":
@@ -154,7 +156,7 @@ class NotionService:
     # -----------------------
     # Page Parsing
     # -----------------------
-    def simplify_page(self, page: Dict[str, Any]) -> Dict[str, Any]:
+    def simplify_page(self, page: dict[str, Any]) -> dict[str, Any]:
         """Convert a Notion page to a simplified dictionary."""
         props = page.get("properties") or {}
         simple = {k: self._simplify_property(v) for k, v in props.items()}
@@ -174,8 +176,8 @@ class NotionService:
         return simple
 
     def parse_data_source_results(
-        self, ds_result: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+        self, ds_result: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """Parse data source query results into simplified pages."""
         items = []
         for res in ds_result.get("results") or []:
@@ -190,7 +192,7 @@ class NotionService:
     # -----------------------
     def query_fact_by_page_id(
         self, fact_ds_id: str, page_id: str
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Query FACT data source by page ID."""
         query = {"filter": {"property": "title", "rich_text": {"contains": page_id}}}
         result = self.query_data_source(fact_ds_id, query)
@@ -198,15 +200,15 @@ class NotionService:
 
     def query_talhoes_by_farm_id(
         self, talhoes_ds_id: str, farm_id: str
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Query Talhões data source by farm relation ID."""
         query = {"filter": {"property": "farm", "relation": {"contains": farm_id}}}
         result = self.query_data_source(talhoes_ds_id, query)
         return self.parse_data_source_results(result)
 
     def query_talhoes_by_farm_ids(
-        self, talhoes_ds_id: str, farm_ids: List[str]
-    ) -> List[Dict[str, Any]]:
+        self, talhoes_ds_id: str, farm_ids: list[str]
+    ) -> list[dict[str, Any]]:
         """Query Talhões data source by multiple farm IDs."""
         all_talhoes = []
         for farm_id in farm_ids:
@@ -219,10 +221,10 @@ class NotionService:
     # -----------------------
     def summarize_talhoes(
         self,
-        talhoes_pages: List[Dict[str, Any]],
+        talhoes_pages: list[dict[str, Any]],
         area_property_name: str = "area",
         talhao_name_fallback: str = "_title",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Aggregate talhões information (count, names, areas)."""
         total = len(talhoes_pages)
         nomes = []
@@ -239,18 +241,18 @@ class NotionService:
             )
             if name:
                 nomes.append(name)
-
             area = p.get(area_property_name)
-            # Handle Brazilian decimal format (comma as decimal separator)
+            # Convert area string from Brazilian decimal format (comma as decimal separator) to float-compatible format.
             if isinstance(area, str):
+                area = area.replace(",", ".")
                 area = area.replace(",", ".")
 
             try:
                 area_float = float(area) if area else 0.0
                 if area_float > 0:
                     areas.append(area_float)
-            except (ValueError, TypeError):
-                pass
+            except (ValueError, TypeError) as e:
+                logging.debug(f"Failed to parse area '{area}' for talhão '{name}': {e}")
 
         return {
             "quantidade_talhoes": total,
@@ -260,8 +262,8 @@ class NotionService:
         }
 
     def extract_farm_ids_from_fact_item(
-        self, fact_item: Dict[str, Any], farm_property_name: str = "farm"
-    ) -> List[str]:
+        self, fact_item: dict[str, Any], farm_property_name: str = "farm"
+    ) -> list[str]:
         """Extract farm relation IDs from a parsed FACT item."""
         farm_ids = fact_item.get(farm_property_name, [])
         if not isinstance(farm_ids, list):

@@ -3,9 +3,10 @@ Service for extracting and processing plot data from Notion pages.
 """
 
 import logging
-from typing import Dict, List
+
 from services.notion.notion_service import NotionService
-from utils.notion_utils import normalize_prop_name
+from utils.notion import normalize_prop_name
+
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +17,7 @@ class PlotDataExtractor:
     def __init__(self):
         self.notion_service = NotionService()
 
-    async def extract_plots_data(self, report_id: str) -> List[Dict]:
+    async def extract_plots_data(self, report_id: str) -> list[dict]:
         """
         Extract plots data from Notion page properties.
 
@@ -50,7 +51,7 @@ class PlotDataExtractor:
             logger.error(f"Error getting plots data for report {report_id}: {str(e)}")
             raise
 
-    def _extract_plots_from_properties(self, properties: Dict) -> List[Dict]:
+    def _extract_plots_from_properties(self, properties: dict) -> list[dict]:
         """Extract plot data from page properties."""
         plots = []
 
@@ -90,7 +91,7 @@ class PlotDataExtractor:
 
         return plots
 
-    def _find_photos_property_key(self, properties: Dict, talhao_number: int) -> str:
+    def _find_photos_property_key(self, properties: dict, talhao_number: int) -> str:
         """Find the photos property key for a given talhao number."""
         # Try to find the fotos property in a case-insensitive way and support variations
 
@@ -110,8 +111,18 @@ class PlotDataExtractor:
 
         return None
 
-    def _extract_images_from_property(self, fotos_prop: Dict) -> List[Dict]:
-        """Extract image URLs and names from a files property."""
+    def _extract_images_from_property(self, fotos_prop: dict) -> list[dict]:
+        """
+        Extract image URLs and names from a files property.
+
+        NOTE: Notion image URLs contain temporary authentication tokens that expire after 1 hour.
+        For PDF generation, these images should be:
+        1. Downloaded and cached locally, OR
+        2. Uploaded to Vercel Blob storage for permanent URLs, OR
+        3. Embedded as base64 data URLs in the HTML
+
+        Current implementation returns temporary URLs which may expire before PDF rendering.
+        """
         images = []
         files_list = []
 
@@ -130,11 +141,13 @@ class PlotDataExtractor:
                 url = file.get("url") or file.get("file_url")
 
             if url:
+                # TODO: Consider downloading and caching images or converting to base64
+                # for persistent PDF generation
                 images.append({"url": url, "name": file.get("name", "")})
 
         return images
 
-    def _extract_rich_text_content(self, property_data: Dict) -> List[str]:
+    def _extract_rich_text_content(self, property_data: dict) -> list[str]:
         """Extract content from rich_text property."""
         return [
             text.get("text", {}).get("content", "")
@@ -142,8 +155,8 @@ class PlotDataExtractor:
         ]
 
     async def _enhance_plots_with_block_images(
-        self, report_id: str, plots: List[Dict]
-    ) -> List[Dict]:
+        self, report_id: str, plots: list[dict]
+    ) -> list[dict]:
         """Try to find images in page blocks as fallback."""
         logger.info(
             "Some plots have no images in properties — scanning page blocks for image blocks as fallback"
@@ -187,7 +200,7 @@ class PlotDataExtractor:
 
         return plots
 
-    def _build_plot_name_index(self, plots: List[Dict]) -> Dict[int, List[str]]:
+    def _build_plot_name_index(self, plots: list[dict]) -> dict[int, list[str]]:
         """Build an index of plot names for matching."""
         name_index_map = {}
         for idx, p in enumerate(plots):
@@ -199,8 +212,8 @@ class PlotDataExtractor:
         return name_index_map
 
     def _extract_image_from_block(
-        self, block: Dict, blocks: List[Dict], block_index: int, rt_text
-    ) -> Dict:
+        self, block: dict, blocks: list[dict], block_index: int, rt_text
+    ) -> dict:
         """Extract image information from a block."""
         image_obj = block.get("image", {})
 
@@ -244,7 +257,7 @@ class PlotDataExtractor:
         return {"url": url, "caption": caption, "nearby_text": nearby_text}
 
     def _match_image_to_plot(
-        self, image_info: Dict, name_index_map: Dict, plots: List[Dict]
+        self, image_info: dict, name_index_map: dict, plots: list[dict]
     ) -> bool:
         """Try to match an image to a plot based on text context."""
         caption_l = image_info["caption"].lower()
@@ -262,7 +275,7 @@ class PlotDataExtractor:
                     return True
         return False
 
-    def _assign_unmatched_images(self, plots: List[Dict], unmatched: List[Dict]):
+    def _assign_unmatched_images(self, plots: list[dict], unmatched: list[dict]):
         """Assign unmatched images to plots that still have no images (left-to-right)."""
         uidx = 0
         for p in plots:
