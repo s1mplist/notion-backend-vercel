@@ -4,15 +4,16 @@ Service for processing webhook data and coordinating report generation.
 
 import logging
 from datetime import datetime
-from typing import Dict, Optional
 
+from core.config import settings
 from models import WebhookRequest
 from models.generation import GenerationMetadata
-from services.notion_service import NotionService
-from services.plot_data_extractor import PlotDataExtractor
-from services.notion_mapper import NotionDataMapper
-from services.notion_writer import NotionWriter
-from core.config import settings
+from services.data.metadata import MetadataService
+from services.data.plot_data import PlotDataExtractor
+from services.notion.mapper import NotionDataMapper
+from services.notion.notion_service import NotionService
+from services.notion.writer import NotionWriter
+
 
 logger = logging.getLogger(__name__)
 
@@ -24,10 +25,11 @@ class WebhookProcessor:
         self.notion_service = NotionService()
         self.plot_extractor = PlotDataExtractor()
         self.data_mapper = NotionDataMapper()
+        self.metadata_service = MetadataService()
 
     async def process_webhook_data(
         self, gen_meta: GenerationMetadata, webhook_data: WebhookRequest
-    ) -> Dict:
+    ) -> dict:
         """
         Process webhook data from Notion and coordinate report generation.
 
@@ -57,6 +59,16 @@ class WebhookProcessor:
             # 5. Map data to report model
             report_data = self.data_mapper.map_to_report(notion_data, plots_data)
             self._inject_farm_name(report_data, farm_name)
+
+            # 5.5. Enrich with metadata from Notion databases (if configured)
+            try:
+                report_data = await self.metadata_service.enrich_report_with_metadata(
+                    report_data, farm_name
+                )
+                logger.info("Report enriched with metadata from Notion databases")
+            except Exception as e:
+                logger.warning(f"Failed to enrich report with metadata: {e}")
+                # Continue without metadata enrichment
 
             # 6. Update generation metadata
             gen_meta.generation_completed_at = datetime.now()
@@ -97,7 +109,7 @@ class WebhookProcessor:
             raise ValueError("Invalid or missing Notion page ID in webhook data.")
         return page_id
 
-    def _validate_notion_id(self, notion_data: Dict) -> str:
+    def _validate_notion_id(self, notion_data: dict) -> str:
         """Validate notion ID from page data."""
         notion_id = notion_data.get("id")
         if not isinstance(notion_id, str) or not notion_id:
@@ -105,7 +117,7 @@ class WebhookProcessor:
         return notion_id
 
     async def _resolve_farm_name(
-        self, webhook_data: WebhookRequest, notion_data: Dict
+        self, webhook_data: WebhookRequest, notion_data: dict
     ) -> str:
         """Try to resolve the database title (farm name)."""
         database_id = (
@@ -141,9 +153,9 @@ class WebhookProcessor:
         webhook_data: WebhookRequest,
         gen_meta: GenerationMetadata,
         report_data,
-        pdf_url: Optional[str],
-        preview_url: Optional[str] = None,
-    ) -> Optional[str]:
+        pdf_url: str | None,
+        preview_url: str | None = None,
+    ) -> str | None:
         """Create a record in Notion database if configured."""
         output_db_id = settings.notion_output_database_id
         if not output_db_id:
@@ -177,11 +189,11 @@ class WebhookProcessor:
 
     def _build_success_response(
         self,
-        pdf_path: Optional[str],
-        notion_record_page_id: Optional[str],
-        pdf_public_url: Optional[str],
-        preview_url: Optional[str] = None,
-    ) -> Dict:
+        pdf_path: str | None,
+        notion_record_page_id: str | None,
+        pdf_public_url: str | None,
+        preview_url: str | None = None,
+    ) -> dict:
         """Build success response dictionary."""
         return {
             "status": "success",

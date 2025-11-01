@@ -1,13 +1,13 @@
 from datetime import datetime
-from typing import Dict, Any, List
-from models.report import Report, Plot, Image
-import unicodedata
-import re
+from typing import Any
+
+from models.report import Image, Plot, Report
+from utils.notion import extract_text
 
 
 class NotionDataMapper:
     @staticmethod
-    def filter_properties(properties: Dict[str, Any]) -> Dict[str, Any]:
+    def filter_properties(properties: dict[str, Any]) -> dict[str, Any]:
         """Return a new dict containing only Notion properties that have a meaningful value.
 
         This helps downstream mapping code ignore empty fields and simplifies templates.
@@ -15,7 +15,7 @@ class NotionDataMapper:
         if not properties:
             return {}
 
-        def has_value(prop: Dict[str, Any]) -> bool:
+        def has_value(prop: dict[str, Any]) -> bool:
             if not prop:
                 return False
             prop_type = prop.get("type") or ""
@@ -47,7 +47,7 @@ class NotionDataMapper:
 
             # Checkbox: consider only when True
             if prop_type == "checkbox":
-                return bool(val) is True
+                return val is True
 
             # Select-like and single-value fields
             if prop_type in (
@@ -67,7 +67,7 @@ class NotionDataMapper:
             # Fallback: consider truthiness
             return bool(val)
 
-        filtered: Dict[str, Any] = {}
+        filtered: dict[str, Any] = {}
         for k, v in properties.items():
             try:
                 if has_value(v):
@@ -80,23 +80,7 @@ class NotionDataMapper:
         return filtered
 
     @staticmethod
-    def extract_text(rich_text_list: List[Dict[str, Any]]) -> str:
-        """Extract text from Notion's rich_text format"""
-        if not rich_text_list:
-            return ""
-        return " ".join(
-            text.get("text", {}).get("content", "") for text in rich_text_list
-        )
-
-    @staticmethod
-    def extract_date(date_obj: Dict[str, Any]) -> datetime:
-        """Convert Notion date to datetime"""
-        if not date_obj or "start" not in date_obj:
-            return datetime.now()
-        return datetime.fromisoformat(date_obj["start"].replace("Z", "+00:00"))
-
-    @staticmethod
-    def extract_images(files: List[Dict[str, Any]]) -> List[Image]:
+    def extract_images(files: list[dict[str, Any]]) -> list[Image]:
         """Extract images from Notion's files property"""
         images = []
         for file in files:
@@ -108,44 +92,24 @@ class NotionDataMapper:
                     images.append(Image(url=url, description=file.get("name", "")))
         return images
 
-    @staticmethod
-    def normalize_prop_name(name: str) -> str:
-        """Normalize a Notion property name for robust matching.
-
-        - Convert to lowercase
-        - Remove diacritics (accents)
-        - Replace non-alphanumeric characters with a single space
-        - Collapse multiple spaces and strip
-        """
-        if not name:
-            return ""
-        # Normalize unicode and remove diacritics
-        nfkd = unicodedata.normalize("NFKD", name)
-        no_accents = "".join([c for c in nfkd if not unicodedata.combining(c)])
-        # Lowercase
-        s = no_accents.lower()
-        # Replace non-alphanumeric characters with spaces
-        s = re.sub(r"[^a-z0-9]+", " ", s)
-        # Collapse spaces
-        s = re.sub(r"\s+", " ", s).strip()
-        return s
+    # normalize_prop_name, extract_text, extract_date agora estão em src.utils.notion_utils
 
     @classmethod
-    def map_plot(cls, plot_data: Dict[str, Any]) -> Plot:
+    def map_plot(cls, plot_data: dict[str, Any]) -> Plot:
         """Map Notion page data to Plot model"""
         return Plot(
             id=plot_data.get("id", ""),
-            area=0.0,  # Área será preenchida posteriormente se necessário
+            area=0.0,  # Area will be filled later if necessary
             growth_stage=plot_data.get("growth_stage", [""])[0]
             if plot_data.get("growth_stage")
             else "",
             crop=plot_data.get("name", [""])[0] if plot_data.get("name") else "",
-            variety="",  # Variedade será preenchida posteriormente se necessário
+            variety="",  # Variety will be filled in later if necessary
             images=[
                 Image(url=img.get("url", ""), description="")
                 for img in plot_data.get("images", [])
             ],
-            additional_images="",
+            additional_images=[],
             assessment=plot_data.get("assessment", [""])[0]
             if plot_data.get("assessment")
             else "",
@@ -153,24 +117,22 @@ class NotionDataMapper:
 
     @classmethod
     def map_to_report(
-        cls, notion_data: Dict[str, Any], plots_data: List[Dict[str, Any]]
+        cls, notion_data: dict[str, Any], plots_data: list[dict[str, Any]]
     ) -> Report:
         """Map Notion data to Report model (ignore empty fields)"""
         props = notion_data.get("properties", {})
 
         # Extrair textos das propriedades rich_text
-        informacoes = cls.extract_text(
+        informacoes = extract_text(
             props.get("Informações Gerais", {}).get("rich_text", [])
         )
-        cronograma = cls.extract_text(
+        cronograma = extract_text(
             props.get("Cronograma de Operações da Fazenda", {}).get("rich_text", [])
         )
 
         # Extrair datas
-        data_visita = cls.extract_text(
-            props.get("Data da Visita", {}).get("rich_text", [])
-        )
-        data_retorno = cls.extract_text(
+        data_visita = extract_text(props.get("Data da Visita", {}).get("rich_text", []))
+        data_retorno = extract_text(
             props.get("Data de Retorno (Prevista)", {}).get("rich_text", [])
         )
 
@@ -194,10 +156,10 @@ class NotionDataMapper:
         return Report(
             farm_name="",  # Será preenchido posteriormente
             consultant_name="",  # Será preenchido posteriormente
-            report_month=datetime.now().strftime("%B %Y"),
+            report_month=current_visit_date.strftime("%B %Y"),
             owner_name="",  # Será preenchido posteriormente
             farm_city="",  # Será preenchido posteriormente
-            harvest_period="2025/2026",  # Valor padrão ou será preenchido posteriormente
+            harvest_period="2025/2026",  # Default value or will be filled in later
             general_info=informacoes,
             next_visit_date=next_visit_date,
             current_visit_date=current_visit_date,

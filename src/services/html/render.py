@@ -1,14 +1,15 @@
-import logging
-import base64
-import mimetypes
+import asyncio
 import hashlib
+import logging
+import os
 from datetime import datetime
 from pathlib import Path
-from jinja2 import Environment, FileSystemLoader
-from typing import Optional
 
-from models.report import Report
+from jinja2 import Environment, FileSystemLoader, TemplateNotFound, select_autoescape
+
 from core.config import settings
+from models.report import Report
+from utils.html import inline_assets
 
 
 logger = logging.getLogger(__name__)
@@ -21,93 +22,87 @@ class HTMLRenderer:
     This class handles the rendering of HTML content from Report data using
     the templates in the template/ directory. The rendered HTML can then be
     sent to any PDF service (Bannerbear, PDFShift, etc.).
+
+    Optionally, attempts to load a legacy template ('report_template.html') if present;
+    if not found, this is handled gracefully with exception handling.
     """
 
-    def __init__(self):
-        repo_root = Path(__file__).resolve().parents[2]
-        self.template_dir = repo_root / "template"
-
+    def __init__(self) -> None:
+        templates_dir = self._locate_templates_dir()
+        self.templates_root = templates_dir  # Define templates_root for use elsewhere
         self.env = Environment(
-            loader=FileSystemLoader(str(self.template_dir)),
+            loader=FileSystemLoader(str(templates_dir)),
+            autoescape=select_autoescape(["html", "xml"]),
+            trim_blocks=True,
+            lstrip_blocks=True,
             enable_async=True,
-            auto_reload=False,
-            cache_size=100,
         )
+        # Keep compatibility with current path structure
+        self.template_name = "relatorios/terras-gerais/template.html"
 
-        # Load templates
-        self.report_template = self.env.get_template("report_template.html")
+        # Load legacy template if present (optional)
+        try:
+            self.report_template = self.env.get_template("report_template.html")
+        except TemplateNotFound:
+            self.report_template = None
 
-        # Read and cache CSS
-        self._styles = self._read_styles()
+        # Default styles for legacy rendering
+        self._styles = self._read_styles(self.templates_root)
 
         # Audit logging configuration
         self._enable_html_audit = settings.enable_html_audit
         self._html_audit_max_chars = settings.html_audit_max_chars
 
-    def _read_styles(self) -> str:
+    def _locate_templates_dir(self) -> Path:
+        """Locate the templates/ directory robustly (dev and server).
+
+        Resolution order:
+        1) Environment variable TEMPLATES_DIR (if set and exists)
+        2) Optional settings.templates_dir (if present and exists)
+        3) Walk up from this file and pick the first '<parent>/templates' that exists
+        4) Current working directory 'templates' (if exists)
+
+        Raises FileNotFoundError if not found.
+        """
+        # 1) Environment override
+        env_dir = os.getenv("TEMPLATES_DIR")
+        if env_dir:
+            p = Path(env_dir).resolve()
+            if p.is_dir():
+                return p
+
+        # 2) Settings override (optional attr)
+        cfg_dir = getattr(settings, "templates_dir", None)
+        if cfg_dir:
+            p = Path(str(cfg_dir)).resolve()
+            if p.is_dir():
+                return p
+
+        # 3) Search parents for a 'templates' directory
+        here = Path(__file__).resolve()
+        for parent in [here] + list(here.parents):
+            candidate = (parent / "templates").resolve()
+            if candidate.is_dir():
+                return candidate
+
+        # 4) CWD fallback
+        cwd_candidate = (Path.cwd() / "templates").resolve()
+        if cwd_candidate.is_dir():
+            return cwd_candidate
+
+        raise FileNotFoundError(
+            f"Templates directory not found. Tried TEMPLATES_DIR, settings.templates_dir,"
+            f" parents of {here}, and {cwd_candidate}"
+        )
+
+    def _read_styles(self, base_dir: Path) -> str:
         """Read the CSS file and return its contents."""
-        css_path = self.template_dir / "styles.css"
+        css_path = base_dir / "styles.css"
         try:
             return css_path.read_text(encoding="utf-8")
         except Exception:
             logger.warning("CSS file not found; continuing without styles")
             return ""
-
-    def _data_uri_for_local_image(self, rel_path: str) -> Optional[str]:
-        """Convert local image to data URI for embedding in HTML."""
-        # Support ./images/... or images/...
-        rel = rel_path.lstrip("./")
-        img_path = self.template_dir / rel
-        if not img_path.exists():
-            return None
-        try:
-            data = img_path.read_bytes()
-            mime, _ = mimetypes.guess_type(str(img_path))
-            if not mime:
-                mime = "image/jpeg"
-            b64 = base64.b64encode(data).decode("ascii")
-            return f"data:{mime};base64,{b64}"
-        except Exception as e:
-            logger.exception("Failed to inline image %s: %s", img_path, e)
-            return None
-
-    def _inline_assets(self, html: str) -> str:
-        """Inline CSS and local images into the HTML."""
-        # Inline styles.css
-        if 'href="styles.css"' in html:
-            style_tag = f"<style>\n{self._styles}\n</style>"
-            html = html.replace('<link rel="stylesheet" href="styles.css">', style_tag)
-            # Try variations
-            html = html.replace(
-                '<link rel="stylesheet" href="./styles.css">', style_tag
-            )
-
-        # Inline local images used by templates (header logos, etc.)
-        markers = [
-            'src="./images/',
-            'src="images/',
-        ]
-        for marker in markers:
-            start = 0
-            while True:
-                idx = html.find(marker, start)
-                if idx == -1:
-                    break
-                # Find the opening and closing quotes of the src attribute
-                q1 = html.find('"', idx)  # the first quote after src=
-                q2 = html.find('"', q1 + 1)
-                if q1 == -1 or q2 == -1:
-                    break
-                path_val = html[q1 + 1 : q2]
-                data_uri = self._data_uri_for_local_image(path_val)
-                if data_uri:
-                    html = html[: q1 + 1] + data_uri + html[q2:]
-                    start = q1 + 1 + len(data_uri)
-                else:
-                    start = q2 + 1
-
-        logger.debug("HTML content after inlining assets: %s", html)
-        return html
 
     async def render_report_html(self, report_data: Report) -> str:
         """
@@ -119,7 +114,81 @@ class HTMLRenderer:
         Returns:
             Complete HTML string ready for PDF conversion
         """
-        # Use report data as-is (no image optimization)
+        # Usa dados como estão (sem otimização de imagem)
+        next_visit = getattr(report_data, "next_visit_date", None)
+        current_visit = getattr(report_data, "current_visit_date", None)
+
+        context = {
+            "farm_name": getattr(report_data, "farm_name", ""),
+            "consultant_name": getattr(report_data, "consultant_name", ""),
+            "report_month": getattr(report_data, "report_month", ""),
+            "owner_name": getattr(report_data, "owner_name", ""),
+            "farm_city": getattr(report_data, "farm_city", ""),
+            "harvest_period": getattr(report_data, "harvest_period", ""),
+            "general_info": getattr(report_data, "general_info", ""),
+            "next_visit_date": next_visit.strftime("%d/%m/%Y") if next_visit else "",
+            "current_visit_date": current_visit.strftime("%d/%m/%Y")
+            if current_visit
+            else "",
+            "plots": getattr(report_data, "plots", []),
+        }
+
+        # renderização (antes usava Environment implícito)
+        template = self.env.get_template(self.template_name)
+        html = await template.render_async(**context)
+        return html
+
+    def render_report_html_sync(self, report_data: Report) -> str:
+        """
+        Synchronous version of render_report_html for compatibility.
+
+        Args:
+            report_data: Report model with data
+
+        Returns:
+            Complete HTML string ready for PDF conversion
+        """
+        return asyncio.run(self.render_report_html(report_data))
+
+    async def render_template_slug(
+        self, template_slug: str, report_data: Report
+    ) -> str:
+        """
+        Render a report using a dynamic template bundle under templates/relatorios/{template_slug}.
+
+        The bundle must contain:
+        - template.html (main template)
+        - styles.css (optional)
+        - any partials like talhao.html (referenced via {% include 'talhao.html' %})
+
+        Args:
+            template_slug: e.g. "terras-gerais"
+            report_data: Report model with data
+
+        Returns:
+            Rendered HTML string
+        """
+        base_dir = self.templates_root / "relatorios" / template_slug
+        if not base_dir.exists():
+            raise FileNotFoundError(
+                f"Template '{template_slug}' não encontrado em {base_dir}"
+            )
+
+        # Build a dedicated Jinja environment rooted at the template bundle directory
+        auto_reload = getattr(settings, "jinja_auto_reload", True)
+        env = Environment(
+            loader=FileSystemLoader(str(base_dir)),
+            enable_async=True,
+            auto_reload=auto_reload,
+            cache_size=100,
+            autoescape=select_autoescape(["html", "xml"]),
+            trim_blocks=True,
+            lstrip_blocks=True,
+        )
+
+        template = env.get_template("template.html")
+        styles = self._read_styles(base_dir)
+
         next_visit = getattr(report_data, "next_visit_date", None)
         current_visit = getattr(report_data, "current_visit_date", None)
 
@@ -139,29 +208,13 @@ class HTMLRenderer:
             "plots": getattr(report_data, "plots", []) or [],
         }
 
-        # Use async template rendering
-        html = await self.report_template.render_async(**context)
-        final_html = self._inline_assets(html)
+        html = await template.render_async(**context)
+        final_html = inline_assets(html, base_dir, styles)
 
-        # Log HTML for audit
         if self._enable_html_audit:
             self._log_html_audit(final_html, context, report_data)
 
         return final_html
-
-    def render_report_html_sync(self, report_data: Report) -> str:
-        """
-        Synchronous version of render_report_html for compatibility.
-
-        Args:
-            report_data: Report model with data
-
-        Returns:
-            Complete HTML string ready for PDF conversion
-        """
-        import asyncio
-
-        return asyncio.run(self.render_report_html(report_data))
 
     def get_css_content(self) -> str:
         """
@@ -205,11 +258,18 @@ class HTMLRenderer:
         )
 
         # Log full HTML content at debug level (can be disabled in production)
+        # Sanitize HTML content for logging on terminals that can't encode emojis
+        truncated = self._truncate_html_for_log(html_content)
+        try:
+            safe_html = truncated.encode("ascii", "backslashreplace").decode("ascii")
+        except Exception:
+            safe_html = truncated  # best-effort
+
         logger.debug(
             "HTML_AUDIT_CONTENT | Hash: %s | Timestamp: %s | Content:\n%s",
             content_hash,
             datetime.now().isoformat(),
-            self._truncate_html_for_log(html_content),
+            safe_html,
         )
 
         # Log plots data summary
@@ -298,5 +358,3 @@ class HTMLRenderer:
             total_images,
             "; ".join(plot_names),
         )
-
-    # Note: image optimization intentionally removed per requirements

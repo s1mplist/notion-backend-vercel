@@ -24,9 +24,33 @@ body {
     font-size: 14px;
 }
 
-/* Configuração de página para PDF - tamanho aumentado */
+/* Configuração de página para PDF - tamanho A3 (retrato) */
 @page {
-    size: A4;
+    size: A3 portrait;
+    margin: 1.5cm;
+}
+
+/* Pré-visualização em tela: centralizar página e evitar ocupar toda a largura */
+@media screen {
+    html { background: #f3f4f6; }
+
+    /* A3 (retrato) como padrão atual */
+    body.page-a3 {
+        width: 297mm;
+        margin: 10mm auto;
+        background: #fff;
+        box-shadow: 0 0 0 1px #e5e7eb, 0 10px 30px rgba(0,0,0,.08);
+        overflow-x: hidden;
+    }
+
+    /* Alternativa A4 (caso necessário em outras templates) */
+    body.page-a4 {
+        width: 210mm;
+        margin: 10mm auto;
+        background: #fff;
+        box-shadow: 0 0 0 1px #e5e7eb, 0 10px 30px rgba(0,0,0,.08);
+        overflow-x: hidden;
+    }
 }
 
 /* Cabeçalho */
@@ -115,7 +139,7 @@ body {
     margin-bottom: 0.5rem;
 }
 
-/* Galeria de imagens */
+/* Galeria de imagens - OTIMIZADA PARA PDF */
 .images-and-assessment-group {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
@@ -288,6 +312,7 @@ body {
 
 /* Print */
 @media print {
+    /* Page breaks */
     .talhao {
         page-break-before: always !important;
         page-break-inside: avoid !important;
@@ -296,5 +321,33 @@ body {
     
     .talhao:first-of-type {
         page-break-before: auto !important;
+    }
+    
+    /* Image optimization for PDF size reduction */
+    img, .gallery-image, .header-image {
+        /* Force lower quality rendering to reduce PDF size */
+        image-rendering: -webkit-optimize-contrast;
+        image-rendering: crisp-edges;
+        
+        /* Limit maximum dimensions */
+        max-width: 400px !important;
+        max-height: 300px !important;
+        
+        /* Compress images in PDF */
+    -webkit-print-color-adjust: economy;
+    print-color-adjust: economy;
+    }
+    
+    .gallery-image {
+        /* Gallery images even smaller */
+        max-width: 350px !important;
+        max-height: 200px !important;
+        height: auto !important;
+    }
+    
+    /* Reduce overall quality to save space */
+    * {
+    -webkit-print-color-adjust: economy;
+    print-color-adjust: economy;
     }
 }

@@ -5,10 +5,10 @@ Implements rate limiting to prevent API abuse and respect external API limits.
 """
 
 import asyncio
+import logging
 import time
 from collections import defaultdict, deque
-from typing import Dict
-import logging
+
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ class RateLimiter:
         """
         self.max_requests = max_requests
         self.window_seconds = window_seconds
-        self.requests: Dict[str, deque] = defaultdict(deque)
+        self.requests: dict[str, deque] = defaultdict(deque)
         self._lock = asyncio.Lock()
 
     async def is_allowed(self, key: str) -> bool:
@@ -101,7 +101,7 @@ class RateLimiter:
         logger.error(f"Rate limit timeout for {key} after {max_wait_seconds}s")
         return False
 
-    def get_stats(self, key: str) -> Dict[str, int]:
+    def get_stats(self, key: str) -> dict[str, int]:
         """
         Get rate limiting statistics for a key.
 

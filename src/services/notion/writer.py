@@ -1,32 +1,19 @@
-import json
-from typing import Optional
-from datetime import datetime, date
-import uuid as _uuid
+import functools
+import logging
+from datetime import date, datetime
+
 from notion_client import AsyncClient
 
-from models.generation import GenerationMetadata
 from core.config import settings
+from models.generation import GenerationMetadata
+from utils.json import to_json_string
+
+
+logger = logging.getLogger(__name__)
 
 
 class NotionWriter:
-    @staticmethod
-    def _json_default(o):
-        # Handle common non-serializable types
-        if isinstance(o, (datetime, date)):
-            return o.isoformat()
-        if isinstance(o, _uuid.UUID):
-            return str(o)
-        return str(o)
-
-    @staticmethod
-    def _to_json_text(obj: dict) -> str:
-        try:
-            return json.dumps(
-                obj, ensure_ascii=False, indent=2, default=NotionWriter._json_default
-            )
-        except Exception:
-            # Fallback to simple string representation
-            return str(obj)
+    """Service for writing data to Notion databases."""
 
     @staticmethod
     async def _get_title_property_name(notion: AsyncClient, database_id: str) -> str:
@@ -40,18 +27,20 @@ class NotionWriter:
             for name, schema in props.items():
                 if schema.get("type") == "title":
                     return name
-        except Exception:
-            pass
+        except Exception as e:
+            logger.exception(
+                f"Failed to retrieve title property name for database {database_id}: {e}"
+            )
         return "Name"
 
     @staticmethod
     def _build_children_blocks(
         payload: dict,
         metadata: GenerationMetadata,
-        pdf_url: Optional[str],
-        preview_url: Optional[str] = None,
+        pdf_url: str | None,
+        preview_url: str | None = None,
     ):
-        payload_json = NotionWriter._to_json_text(payload)
+        payload_json = to_json_string(payload)
         metadata_json = metadata.model_dump_json(indent=2)
 
         blocks = [
@@ -159,29 +148,34 @@ class NotionWriter:
         title: str,
         payload: dict,
         metadata: GenerationMetadata,
-        pdf_url: Optional[str] = None,
-        preview_url: Optional[str] = None,
-        additional_fields: Optional[dict] = None,
+        pdf_url: str | None = None,
+        preview_url: str | None = None,
+        additional_fields: dict | None = None,
+        notion: AsyncClient | None = None,
     ) -> str:
         """Create a page record in the target Notion database to log a generation.
 
         Returns the created page id.
         """
-        async with AsyncClient(auth=settings.notion_token) as notion:
+        close_client = False
+        if notion is None:
+            notion = AsyncClient(auth=settings.notion_token)
+            close_client = True
+        try:
             db = await notion.databases.retrieve(database_id=database_id)
             db_props = db.get("properties", {}) or {}
 
             # Fallback: if properties are empty, fetch from data_sources
-            if not db_props:
-                try:
-                    data_sources = db.get("data_sources") or []
-                    if data_sources:
-                        ds_id = data_sources[0].get("id")
-                        if ds_id:
-                            ds = await notion.data_sources.retrieve(ds_id)
-                            db_props = ds.get("properties", {}) or {}
-                except Exception:
-                    pass
+            try:
+                data_sources = db.get("data_sources") or []
+                if data_sources:
+                    ds_id = data_sources[0].get("id")
+                    if ds_id:
+                        ds = await notion.data_sources.retrieve(ds_id)
+                        db_props = ds.get("properties", {}) or {}
+            except (KeyError, AttributeError) as e:
+                logger.warning(f"Error retrieving data source properties: {e}")
+                pass
 
             # Detect title property robustly
             title_prop = None
@@ -202,16 +196,22 @@ class NotionWriter:
                             if db_props.get(candidate, {}).get("type") == "title":
                                 title_prop = candidate
                                 break
-                        except Exception:
+                        except Exception as e:
+                            logger.warning(
+                                f"Error checking title property for candidate '{candidate}': {e}"
+                            )
                             pass
 
-            if not title_prop:
-                # As a last resort, try to pick the first property with type 'title' by inspecting values
                 for name, schema in db_props.items():
                     try:
                         if schema.get("type") == "title":
                             title_prop = name
                             break
+                    except Exception as e:
+                        logger.exception(
+                            f"Exception while inspecting property '{name}' for type 'title': {e}"
+                        )
+                        continue
                     except Exception:
                         continue
 
@@ -226,7 +226,7 @@ class NotionWriter:
                     "title": [
                         {
                             "type": "text",
-                            "text": {"content": title[:200] or "Relatório"},
+                            "text": {"content": title[:200] if title else "Relatório"},
                         }
                     ]
                 }
@@ -241,7 +241,8 @@ class NotionWriter:
                     built = value_builder(schema)
                     if built is not None:
                         properties[prop_name] = built
-                except Exception:
+                except Exception as e:
+                    logger.exception(f"Error building property '{prop_name}': {e}")
                     pass
 
             # Optional structured props
@@ -354,16 +355,15 @@ class NotionWriter:
                 if s.get("type") == "date" and end_iso
                 else None,
             )
-
-            # Duration seconds (number)
             duration_s = None
             if metadata.generation_started_at and metadata.generation_completed_at:
                 try:
                     duration_s = (
                         metadata.generation_completed_at
                         - metadata.generation_started_at
-                    ).total_seconds()
-                except Exception:
+                    )
+                except Exception as e:
+                    logger.exception(f"Error calculating duration: {e}")
                     duration_s = None
             add_prop(
                 "Duration (s)",
@@ -388,42 +388,46 @@ class NotionWriter:
             )
 
             # Additional fields (e.g., Farm/Fazenda)
+            def builder(schema, val):
+                t = schema.get("type")
+                if t == "rich_text":
+                    return {
+                        "rich_text": [
+                            {
+                                "type": "text",
+                                "text": {"content": str(val)[:2000]},
+                            }
+                        ]
+                    }
+                if t == "number":
+                    try:
+                        return {"number": float(val)}
+                    except (ValueError, TypeError) as e:
+                        logger.exception(
+                            f"Error converting value '{val}' to float for property: {e}"
+                        )
+                        return None
+                if t == "date":
+                    try:
+                        if isinstance(val, (datetime, date)):
+                            return {"date": {"start": val.isoformat()}}
+                    except Exception as e:
+                        logger.exception(
+                            f"Error converting value '{val}' to date property: {e}"
+                        )
+                        return None
+                    except Exception:
+                        return None
+                if t == "select":
+                    return {"select": {"name": str(val)[:100]}}
+                # For unsupported types we skip
+                return None
+
             if additional_fields:
                 for k, v in additional_fields.items():
                     if v is None:
                         continue
-
-                    def builder(schema, val=v):
-                        t = schema.get("type")
-                        if t == "rich_text":
-                            return {
-                                "rich_text": [
-                                    {
-                                        "type": "text",
-                                        "text": {"content": str(val)[:2000]},
-                                    }
-                                ]
-                            }
-                        if t == "url":
-                            return {"url": str(val)}
-                        if t == "number":
-                            try:
-                                return {"number": float(val)}
-                            except Exception:
-                                return None
-                        if t == "date":
-                            try:
-                                if isinstance(val, (datetime, date)):
-                                    return {"date": {"start": val.isoformat()}}
-                            except Exception:
-                                return None
-                        if t == "select":
-                            return {"select": {"name": str(val)[:100]}}
-                        # For unsupported types we skip
-                        return None
-
-                    add_prop(k, builder)
-
+                    add_prop(k, functools.partial(builder, val=v))
             page = await notion.pages.create(
                 parent={"type": "database_id", "database_id": database_id},
                 properties=properties,
@@ -432,3 +436,11 @@ class NotionWriter:
                 ),
             )
             return page.get("id")
+        except Exception as e:
+            logger.exception(f"Error creating generation record in Notion: {e}")
+            raise
+        finally:
+            if close_client:
+                await notion.aclose()
+            if close_client:
+                await notion.aclose()

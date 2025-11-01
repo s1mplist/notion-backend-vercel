@@ -1,6 +1,6 @@
-from typing import List, Optional
-from pydantic import BaseModel
 from datetime import datetime
+
+from pydantic import BaseModel
 
 
 class Image(BaseModel):
@@ -14,8 +14,8 @@ class Plot(BaseModel):
     growth_stage: str
     crop: str
     variety: str
-    images: List[Image]
-    additional_images: Optional[str]
+    images: list[Image]
+    additional_images: str | None
     assessment: str
 
 
@@ -30,4 +30,4 @@ class Report(BaseModel):
     next_visit_date: datetime
     current_visit_date: datetime
     operations_schedule: str
-    plots: List[Plot]
+    plots: list[Plot]

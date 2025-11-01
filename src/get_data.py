@@ -5,14 +5,14 @@ This module provides the main function to process webhook data from Notion.
 The heavy lifting is now done by dedicated service classes.
 """
 
+import logging
+
 from models import WebhookRequest
 from models.generation import GenerationMetadata
-from services.webhook_processor import WebhookProcessor
-from utils.logging_config import setup_logging, get_logger
+from services.webhook.processor import WebhookProcessor
 
-# Setup logging
-setup_logging()
-logger = get_logger(__name__)
+
+logger = logging.getLogger(__name__)
 
 
 async def process_webhook_data(

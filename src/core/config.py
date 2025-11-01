@@ -5,8 +5,9 @@ This module centralizes all configuration management using environment variables
 and provides type safety and validation.
 """
 
-from typing import Optional
-from pydantic import Field, field_validator
+from functools import lru_cache
+
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,18 +23,21 @@ class Settings(BaseSettings):
 
     # Notion API Configuration
     notion_token: str = Field(..., description="Notion API token", min_length=50)
-    notion_output_database_id: Optional[str] = Field(
-        None, description="Notion database ID for storing generation records"
+    notion_output_database_id: str | None = Field(
+        None,
+        description="Notion database ID for storing generation records",
+        env=["NOTION_OUTPUT_DATABASE_ID", "NOTION_DATABASE_ID"],
+    )
+
+    notion_fact_database_id: str = Field(
+        ..., description="Notion Fact Database ID", min_length=32
+    )
+    notion_talhoes_database_id: str = Field(
+        ..., description="Notion Talhoes Database ID", min_length=32
     )
 
     # Logging Configuration
     log_level: str = Field(default="DEBUG", description="Logging level")
-    enable_html_audit: bool = Field(
-        default=True, description="Enable HTML audit logging"
-    )
-    html_audit_max_chars: int = Field(
-        default=2000, description="Maximum characters for HTML audit logs"
-    )
 
     # API Configuration
     api_title: str = Field(default="Notion Backend API", description="API title")
@@ -51,36 +55,26 @@ class Settings(BaseSettings):
         default=60, description="Rate limit window in seconds", gt=0
     )
 
-    # PDF Generation Configuration
-    pdf_provider: str = Field(
-        default="disabled",
-        description="PDF generation provider (bannerbear, pdfshift, disabled)",
-    )
-    pdf_api_key: Optional[str] = Field(None, description="PDF service API key")
-
     # Vercel Blob Configuration
-    blob_read_write_token: Optional[str] = Field(
+    blob_read_write_token: str | None = Field(
         None, description="Vercel Blob storage token"
     )
 
-    # Public Base URL for shareable links (e.g., https://your-app.vercel.app)
-    public_base_url: Optional[str] = Field(
-        default=None,
-        description="Public base URL used to build shareable preview links",
+    # HTML Rendering / Audit
+    enable_html_audit: bool = Field(
+        default=False,
+        description="Enable detailed HTML audit logs (debug only)",
+    )
+    html_audit_max_chars: int = Field(
+        default=12000,
+        description="Max characters of HTML to include in audit logs",
+        gt=1000,
     )
 
-    # Image Optimization Configuration
-    enable_image_optimization: bool = Field(
-        default=True, description="Enable image optimization and resizing"
-    )
-    image_max_width: int = Field(
-        default=1920, description="Maximum image width (Full HD)", gt=0
-    )
-    image_max_height: int = Field(
-        default=1080, description="Maximum image height (Full HD)", gt=0
-    )
-    image_quality: int = Field(
-        default=85, description="JPEG quality for optimized images", ge=1, le=100
+    # Public Base URL for shareable links (e.g., https://your-app.vercel.app)
+    public_base_url: str | None = Field(
+        default=None,
+        description="Public base URL used to build shareable preview links",
     )
 
     # Monitoring Configuration
@@ -89,33 +83,33 @@ class Settings(BaseSettings):
         default="/metrics", description="Metrics endpoint path"
     )
 
-    @field_validator("log_level")
-    def validate_log_level(cls, v):
-        """Validate log level."""
-        valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-        if v.upper() not in valid_levels:
-            raise ValueError(f"Log level must be one of: {valid_levels}")
-        return v.upper()
+    # Backwards-compatible properties usados em testes
+    @property
+    def notion_api_token(self) -> str:
+        return self.notion_token
 
-    @field_validator("pdf_provider")
-    def validate_pdf_provider(cls, v):
-        """Validate PDF provider."""
-        valid_providers = ["bannerbear", "pdfshift", "disabled"]
-        if v.lower() not in valid_providers:
-            raise ValueError(f"PDF provider must be one of: {valid_providers}")
-        return v.lower()
+    @property
+    def notion_database_id(self) -> str | None:
+        return self.notion_output_database_id
 
-    @field_validator("notion_token")
-    def validate_notion_token(cls, v):
-        """Validate Notion token format."""
-        if not v.startswith(("ntn_", "secret_")):
-            raise ValueError('Notion token must start with "ntn_" or "secret_"')
-        return v
+    @property
+    def notion_fact_id(self) -> str | None:
+        return self.notion_fact_database_id
 
-    def is_pdf_enabled(self) -> bool:
-        """Check if PDF generation is enabled."""
-        return self.pdf_provider != "disabled" and self.pdf_api_key is not None
+    @property
+    def notion_talhoes_id(self) -> str | None:
+        return self.notion_talhoes_database_id
+
+    @property
+    def vercel_blob_token(self) -> str | None:
+        return self.blob_read_write_token
+
+
+# Helper para cachear settings
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
 
 
 # Global settings instance
-settings = Settings()
+settings = get_settings()

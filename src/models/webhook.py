@@ -1,7 +1,8 @@
-from pydantic import BaseModel, Field, field_validator
-from uuid import UUID
 from datetime import datetime
-from typing import Any, List, Dict, Optional
+from typing import Any
+from uuid import UUID
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class WebhookRequest(BaseModel):
@@ -13,7 +14,7 @@ class WebhookRequest(BaseModel):
     workspace_id: UUID = Field(
         ..., description="The workspace ID where the event originated from"
     )
-    workspace_name: Optional[str] = Field(
+    workspace_name: str | None = Field(
         None,
         description="The workspace name where the event originated from",
         max_length=255,
@@ -28,12 +29,12 @@ class WebhookRequest(BaseModel):
         min_length=1,
         max_length=100,
     )
-    authors: List[Dict[str, Any]] = Field(
+    authors: list[dict[str, Any]] = Field(
         ...,
         description="Array of JSON objects with the ID (id) and type (type) of the author who performed the action that caused this webhook. type can be 'person', 'bot', or 'agent'.",
         min_length=1,
     )
-    accessible_by: Optional[List[Dict[str, Any]]] = Field(
+    accessible_by: list[dict[str, Any]] | None = Field(
         default=None,
         description="Array of JSON objects with the ID (id) and type (type) of each accessible bot and user who owns the bot connection to the integration_id and has access to the webhook's entity.",
     )
@@ -43,11 +44,11 @@ class WebhookRequest(BaseModel):
         ge=1,
         le=8,
     )
-    entity: Dict[str, Any] = Field(
+    entity: dict[str, Any] = Field(
         ...,
         description="ID (id) and type (type) of the object that triggered the event. The type can be 'page', 'block', or 'database'.",
     )
-    data: Dict[str, Any] = Field(
+    data: dict[str, Any] = Field(
         default_factory=dict, description="Additional, event-specific data."
     )
 

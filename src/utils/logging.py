@@ -5,6 +5,7 @@ Logging configuration module.
 import logging
 import os
 from pathlib import Path
+
 from core.config import settings
 
 
@@ -52,8 +53,6 @@ def setup_logging():
     logger = get_logger(__name__)
     logger.info(f"Logging configured with level: {settings.log_level}")
     logger.info(f"Environment: {'Serverless' if is_serverless else 'Local'}")
-    logger.info(f"HTML audit enabled: {settings.enable_html_audit}")
-    logger.info(f"HTML audit max chars: {settings.html_audit_max_chars}")
 
 
 def get_logger(name: str) -> logging.Logger:
