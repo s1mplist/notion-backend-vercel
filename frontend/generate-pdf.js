@@ -102,7 +102,7 @@ module.exports = async (req, res) => {
         endpoint = browserlessUrl;
       } else {
         // Default to browserless.io PDF endpoint when only token is provided
-        endpoint = `https://chrome.browserless.io/pdf?token=${encodeURIComponent(browserlessToken)}`;
+        endpoint = `https://production-sfo.browserless.io/pdf?token=${encodeURIComponent(browserlessToken)}`;
       }
 
       // Some browserless endpoints expect POST body with { html, options }
