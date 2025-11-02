@@ -1,0 +1,17 @@
+{
+  "name": "pdf-generation-service",
+  "version": "1.0.0",
+  "description": "Serverless PDF generation using Puppeteer",
+  "main": "generate-pdf.js",
+  "dependencies": {
+    "@sparticuz/chromium": "^119.0.2",
+    "puppeteer-core": "^24.27.0",
+    "sharp": "^0.34.4"
+  },
+  "engines": {
+    "node": ">=18.x"
+  },
+  "devDependencies": {
+    "puppeteer": "^24.27.0"
+  }
+}
