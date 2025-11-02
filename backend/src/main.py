@@ -1,4 +1,5 @@
 import asyncio
+import locale
 import logging
 import sys
 from datetime import datetime
@@ -8,10 +9,14 @@ from fastapi import FastAPI, HTTPException
 # FastAPI Routes
 from api.health import health_check
 from api.notion.webhook import webhook
-from api.relatorios import report_by_template, report_html_preview
+from api.relatorios import generate_report_pdf, report_by_template
 
-# Config
+# Configuration
 from core.config import settings
+from services.report.generator import ReportGenerator
+
+
+locale.setlocale(locale.LC_ALL, "pt_BR.UTF-8")
 
 
 try:
@@ -34,8 +39,8 @@ app = FastAPI(
 
 app.add_api_route("/health", health_check, methods=["GET"])
 app.add_api_route("/notion/webhook", webhook, methods=["POST"])
-app.add_api_route("/report/html-preview", report_html_preview, methods=["GET"])
 app.add_api_route("/report/{template}", report_by_template, methods=["GET"])
+app.add_api_route("/report/{template_slug}/pdf", generate_report_pdf, methods=["GET"])
 
 
 @app.get("/")
@@ -57,8 +62,6 @@ async def generate_complete_report(page_id: str = None):
     try:
         if not page_id:
             raise HTTPException(status_code=400, detail="page_id parameter is required")
-
-        from services.report_generator import ReportGenerator
 
         generator = ReportGenerator()
         result = await generator.generate_complete_report(page_id)

@@ -12,6 +12,7 @@ from notion_client import AsyncClient
 from core.config import settings
 from models.report import Image, Plot, Report
 from services.data.plot_data import PlotDataExtractor
+from services.html.image import optimize_html_images
 from services.html.render import HTMLRenderer
 from services.notion.mapper import NotionDataMapper
 from services.notion.notion_service import NotionService
@@ -158,6 +159,13 @@ class ReportGenerator:
             # 9. Render with selected template
             html_content = await self.html_renderer.render_template_slug(
                 template_slug, report_data
+            )
+
+            # 10. OTIMIZAR IMAGENS ANTES DE GERAR PDF
+            logger.info("Optimizing images in HTML...")
+            html_content = optimize_html_images(
+                html_content,
+                quality=60,  # Ajuste conforme necessário (40-80)
             )
 
             return {

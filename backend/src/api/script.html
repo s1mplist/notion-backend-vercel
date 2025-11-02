@@ -1,0 +1,145 @@
+<style>
+  #report-download-bar {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 99999;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    background: #ffffffcc;
+    backdrop-filter: saturate(180%) blur(6px);
+    padding: 10px 12px;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+    font-family: system-ui, Arial, sans-serif;
+  }
+
+  #download-pdf-btn {
+    background: #2563eb;
+    color: #fff;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+
+  #download-pdf-btn[disabled] {
+    opacity: .6;
+    cursor: wait;
+  }
+
+  #pdf-format {
+    padding: 6px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+  }
+
+  @media print {
+    #report-download-bar {
+      display: none !important;
+    }
+  }
+</style>
+<div id="report-download-bar">
+  <select id="pdf-format">
+    <option value="A4">A4</option>
+    <option value="A3" selected>A3</option>
+    <option value="Letter">Letter</option>
+  </select>
+  <label style="display:flex;align-items:center;gap:6px;">
+    <input type="checkbox" id="pdf-landscape" /> Paisagem
+  </label>
+  <button id="download-pdf-btn">Baixar PDF</button>
+</div>
+<script>
+  (function () {
+    const btn = document.getElementById('download-pdf-btn');
+    const sel = document.getElementById('pdf-format');
+    const chk = document.getElementById('pdf-landscape');
+
+    async function buildSnapshotHTML() {
+      const container = document.querySelector('#report-root') || document.body;
+
+      // cria documento mínimo com base para resolver assets relativos
+      const doc = document.implementation.createHTMLDocument('Report');
+      const head = doc.head;
+
+      // meta charset e base
+      const meta = doc.createElement('meta'); meta.setAttribute('charset', 'UTF-8'); head.appendChild(meta);
+      const base = doc.createElement('base'); base.setAttribute('href', window.location.origin); head.appendChild(base);
+
+      // copiar <link rel="stylesheet"> e <style> do documento
+      document.querySelectorAll('link[rel="stylesheet"]').forEach(link => {
+        const l = doc.createElement('link');
+        l.rel = 'stylesheet'; l.href = link.href; head.appendChild(l);
+      });
+      document.querySelectorAll('style').forEach(s => {
+        const ns = doc.createElement('style'); ns.textContent = s.textContent; head.appendChild(ns);
+      });
+
+      // wrapper com o relatório
+      const body = doc.body;
+      const wrapper = doc.createElement('div');
+      wrapper.id = 'report-root';
+      wrapper.innerHTML = container.outerHTML; // pega só o relatório
+      body.appendChild(wrapper);
+
+      // força @page padrão
+      const pageStyle = doc.createElement('style');
+      pageStyle.textContent = '@page{ size:auto; margin:10mm; }';
+      head.appendChild(pageStyle);
+
+      const html = '<!DOCTYPE html>' + doc.documentElement.outerHTML;
+      return html;
+    }
+
+    async function downloadPDF() {
+      try {
+        btn.disabled = true; btn.textContent = 'Gerando...';
+
+        const html = await buildSnapshotHTML();
+        const options = {
+          format: sel.value,
+          landscape: chk.checked,
+          printBackground: true,
+          preferCSSPageSize: true,
+          // otimização dentro do Chromium (não infla request)
+          optimizeImages: true,
+          maxImageWidth: 1400,
+          jpegQuality: 0.7,
+          baseURL: window.location.origin
+        };
+
+        const resp = await fetch('/api/generate-pdf', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ html, options })
+        });
+
+        if (!resp.ok) {
+          const t = await resp.text();
+          throw new Error('Falha ao gerar PDF: ' + t);
+        }
+
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'relatorio.pdf';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        alert(e.message || 'Erro ao gerar PDF');
+        console.error(e);
+      } finally {
+        btn.disabled = false; btn.textContent = 'Baixar PDF';
+      }
+    }
+
+    btn.addEventListener('click', downloadPDF);
+  })();
+</script>

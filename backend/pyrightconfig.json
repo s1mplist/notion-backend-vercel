@@ -8,14 +8,13 @@
     "**/node_modules",
     ".venv",
     "venv",
-    "environments"
   ],
   "executionEnvironments": [
     {
-      "root": "src",
+      "root": "./src",
       "pythonVersion": "3.12",
       "extraPaths": [
-        "src"
+        "./src"
       ]
     },
   ],

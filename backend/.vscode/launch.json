@@ -15,9 +15,9 @@
                 "8000"
             ],
             "jinja": true,
-            "cwd": "${workspaceFolder}/src",
+            "cwd": "${workspaceFolder}/backend/src",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}/src"
+                "PYTHONPATH": "${workspaceFolder}/backend/src"
             },
             "console": "integratedTerminal",
             "justMyCode": true
@@ -29,7 +29,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}/src"
+                "PYTHONPATH": "${workspaceFolder}/backend/src"
             },
             "justMyCode": true
         },
@@ -44,7 +44,7 @@
             ],
             "console": "integratedTerminal",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}/src"
+                "PYTHONPATH": "${workspaceFolder}/backend/src"
             },
             "justMyCode": true
         }

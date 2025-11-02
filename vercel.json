@@ -1,18 +1,21 @@
 {
+  "version": 2,
   "builds": [
     {
-      "src": "src/main.py",
-      "use": "@vercel/python",
+      "src": "backend/src/main.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "frontend/api/generate-pdf.js",
+      "use": "@vercel/node",
       "config": {
-        "maxLambdaSize": "15mb"
+        "maxLambdaSize": "50mb"
       }
     }
   ],
   "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "src/main.py"
-    }
+    { "src": "/api/generate-pdf", "dest": "api/generate-pdf.js" },
+    { "src": "/(.*)", "dest": "src/main.py" }
   ],
   "env": {
     "PYTHONPATH": "src"
