@@ -65,7 +65,7 @@ module.exports = async (req, res) => {
     }
 
     const {
-      format = 'A3',
+      format = 'A4',
       landscape = false,
       printBackground = true,
       preferCSSPageSize = true,
