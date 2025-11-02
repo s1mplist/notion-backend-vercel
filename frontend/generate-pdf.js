@@ -87,6 +87,59 @@ module.exports = async (req, res) => {
     });
 
     console.log('[PDF] Launching browser...');
+
+    // Remote renderer fallback: if BROWSERLESS_URL or BROWSERLESS_TOKEN is set
+    // use a managed rendering service (Browserless or self-hosted) to avoid
+    // native library issues on Vercel (libnss3 and others).
+    const browserlessUrl = process.env.BROWSERLESS_URL;
+    const browserlessToken = process.env.BROWSERLESS_TOKEN;
+
+    if (browserlessUrl || browserlessToken) {
+      console.log('[PDF] Using remote renderer', { browserlessUrl: !!browserlessUrl, hasToken: !!browserlessToken });
+
+      let endpoint;
+      if (browserlessUrl) {
+        endpoint = browserlessUrl;
+      } else {
+        // Default to browserless.io PDF endpoint when only token is provided
+        endpoint = `https://chrome.browserless.io/pdf?token=${encodeURIComponent(browserlessToken)}`;
+      }
+
+      // Some browserless endpoints expect POST body with { html, options }
+      // We'll call the endpoint and expect a PDF binary response.
+      const payload = { html, options: { format, landscape, printBackground, preferCSSPageSize, margin, baseURL } };
+
+      console.log('[PDF] Sending HTML to remote renderer', { endpoint });
+      const remoteResp = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!remoteResp.ok) {
+        const txt = await remoteResp.text().catch(() => '');
+        throw new Error(`Remote renderer failed: ${remoteResp.status} ${remoteResp.statusText} ${txt}`);
+      }
+
+      const arrayBuf = await remoteResp.arrayBuffer();
+      const pdfBuffer = Buffer.from(arrayBuf);
+
+      const duration = Date.now() - startTime;
+      console.log('[PDF] Remote generation complete', { duration: `${duration}ms`, size: pdfBuffer.length });
+
+      // Headers and return (same as local flow)
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Length', pdfBuffer.length.toString());
+      res.setHeader('Content-Disposition', 'attachment; filename="relatorio.pdf"');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('X-Generation-Time', duration.toString());
+      res.setHeader('X-PDF-Size', pdfBuffer.length.toString());
+      res.setHeader('X-Environment', isProduction ? 'production' : 'development');
+
+      return res.send(pdfBuffer);
+    }
+
     if (isProduction) {
       browser = await puppeteer.launch({
         args: [
