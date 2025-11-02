@@ -20,18 +20,24 @@ const sharp = require('sharp');
 
 const keepAliveAgent = new https.Agent({ keepAlive: true, maxSockets: 50 });
 
-function fetchWithTimeout(url, ms = 15000) {
+function fetchWithTimeout(url, ms = 15000, init = {}) {
   const ac = new AbortController();
   const t = setTimeout(() => ac.abort(), ms);
+
+  const defaultHeaders = { 'User-Agent': 'Mozilla/5.0 (HeadlessChrome Puppeteer)' };
+  const providedHeaders = (init && init.headers) || {};
+
   return fetch(url, {
     // Mantém querystring completa da URL pré-assinada
     signal: ac.signal,
     redirect: 'follow',
-    // User-Agent ajuda em alguns endpoints/proxies
-    headers: { 'User-Agent': 'Mozilla/5.0 (HeadlessChrome Puppeteer)' },
+    // mescla headers (Content-Type / Cache-Control podem ser passados em init)
+    headers: { ...defaultHeaders, ...providedHeaders },
     // Node fetch não aceita agent p/ https no global correto nas versões antigas do Node;
     // em Node 18+/22 funciona assim:
     agent: keepAliveAgent,
+    // mantém outros init props (method, body, etc.)
+    ...init,
   }).finally(() => clearTimeout(t));
 }
 
@@ -106,13 +112,34 @@ module.exports = async (req, res) => {
       }
 
       // Some browserless endpoints expect POST body with { html, options }
-      // We'll call the endpoint and expect a PDF binary response.
-      const payload = { html, options: { format, landscape, printBackground, preferCSSPageSize, margin, baseURL } };
+      // Browserless validation does NOT accept custom fields under options like `baseURL`.
+      // Inject base URL into the HTML via a <base> tag instead of forwarding it in options.
+      let htmlForRemote = html;
+      if (baseURL && typeof baseURL === 'string') {
+        try {
+          const baseTag = `<base href="${baseURL}">`;
+          if (/\<head[\s\S]*?\>/i.test(htmlForRemote)) {
+            // insert right after opening <head>
+            htmlForRemote = htmlForRemote.replace(/(\<head[\s\S]*?\>)/i, `$1${baseTag}`);
+          } else if (/\<html[\s\S]*?\>/i.test(htmlForRemote)) {
+            // insert a head section after opening <html>
+            htmlForRemote = htmlForRemote.replace(/(\<html[\s\S]*?\>)/i, `$1<head>${baseTag}</head>`);
+          } else {
+            // fallback: prepend base tag
+            htmlForRemote = `${baseTag}\n${htmlForRemote}`;
+          }
+        } catch (e) {
+          console.warn('[PDF] Failed to inject base tag into HTML for remote renderer', e);
+        }
+      }
+
+      const payload = { html: htmlForRemote, options: { format, landscape, printBackground, preferCSSPageSize, margin } };
 
       console.log('[PDF] Sending HTML to remote renderer', { endpoint });
-      const remoteResp = await fetch(endpoint, {
+      const timeoutMs = Number(process.env.BROWSERLESS_TIMEOUT_MS || 30000);
+      const remoteResp = await fetchWithTimeout(endpoint, timeoutMs, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
         body: JSON.stringify(payload),
       });
 
