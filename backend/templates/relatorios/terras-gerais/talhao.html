@@ -1,4 +1,3 @@
-{# Plot fragment: intended to be included inside another template. #}
 <div class="talhao">
     <div class="talhao-info">
         <div>
@@ -24,7 +23,9 @@
         <div class="image-gallery">
             {% for image in plot.images %}
             <div class="gallery-image-wrapper">
-                <img src="{{image.url}}" alt="{{image.description}}" class="gallery-image" loading="lazy" decoding="async" style="max-width:100%;height:auto;display:block;" onerror="this.style.display='none'">
+                <img src="{{image.url}}" alt="{{image.description}}" class="gallery-image" loading="lazy"
+                    decoding="async" style="max-width:100%;height:auto;display:block;"
+                    onerror="this.style.display='none'">
             </div>
             {% endfor %}
         </div>

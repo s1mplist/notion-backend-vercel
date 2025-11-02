@@ -24,31 +24,25 @@ body {
     font-size: 14px;
 }
 
-/* Configuração de página para PDF - tamanho A3 (retrato) */
+/* Configuração de página para PDF */
 @page {
-    size: A3 portrait;
-    margin: 1.5cm;
+    size: 270mm 325mm;
+    margin: 1mm;
 }
+
+/* width height */
 
 /* Pré-visualização em tela: centralizar página e evitar ocupar toda a largura */
 @media screen {
-    html { background: #f3f4f6; }
-
-    /* A3 (retrato) como padrão atual */
-    body.page-a3 {
-        width: 297mm;
-        margin: 10mm auto;
-        background: #fff;
-        box-shadow: 0 0 0 1px #e5e7eb, 0 10px 30px rgba(0,0,0,.08);
-        overflow-x: hidden;
+    html {
+        background: #f3f4f6;
     }
 
-    /* Alternativa A4 (caso necessário em outras templates) */
-    body.page-a4 {
-        width: 210mm;
-        margin: 10mm auto;
+    body {
+        width: 270mm;
+        margin: 5mm auto;
         background: #fff;
-        box-shadow: 0 0 0 1px #e5e7eb, 0 10px 30px rgba(0,0,0,.08);
+        box-shadow: 0 0 0 1px #e5e7eb, 0 10px 30px rgba(0, 0, 0, .08);
         overflow-x: hidden;
     }
 }
@@ -117,12 +111,12 @@ body {
 .talhao {
     background: white;
     border-radius: 8px;
-    padding: 0.6rem;
+    padding: 0.5rem;
     margin-bottom: 0;
     border: 1px solid var(--border-color);
     page-break-inside: avoid !important;
     break-inside: avoid !important;
-    page-break-before: always;
+    page-break-before: auto;
 }
 
 .talhao:first-of-type {
@@ -141,28 +135,50 @@ body {
 
 /* Galeria de imagens - OTIMIZADA PARA PDF */
 .images-and-assessment-group {
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
+    /* Allow the images group to break across pages when necessary so the
+       browser won't move the entire group to the next page if it doesn't
+       fully fit. Individual image wrappers will still avoid being split. */
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+    margin-top: 0.25rem;
 }
 
 .image-gallery {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 0.5rem;
-    margin: 0.5rem 0;
+    gap: 0.25rem;
+    margin: 0.25rem 0;
 }
 
 .gallery-image-wrapper {
     position: relative;
     overflow: hidden;
+    /* Prevent a single image wrapper from being split across pages, but
+       don't force the whole gallery group to jump to the next page. */
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+}
+
+/* Fixed-size gallery image wrappers (screen) to avoid scaling with page
+   width. The image itself fills the wrapper via width/height 100% and
+   object-fit: cover to keep aspect and crop overflow. */
+.gallery-image-wrapper {
+    /* Fixed width for thumbnails; height is flexible so images keep
+       their original aspect ratio (portrait 3:4 ~ 0.75). */
+    width: 410px;
+    display: inline-block;
+    vertical-align: top;
 }
 
 .gallery-image {
+    /* Fill wrapper width but keep natural proportions */
     width: 100%;
-    height: 180px;
-    object-fit: cover;
+    height: auto;
+    object-fit: contain; /* show entire image without cropping */
     border-radius: 6px;
     border: 1px solid var(--border-color);
+    display: block;
+    max-width: 100% !important;
 }
 
 /* Avaliação */
@@ -277,11 +293,25 @@ body {
 }
 
 /* Utilitários */
-.text-center { text-align: center; }
-.mb-1 { margin-bottom: 0.4rem; }
-.mb-2 { margin-bottom: 2rem; }
-.mt-1 { margin-top: 0.4rem; }
-.mt-2 { margin-top: 2rem; }
+.text-center {
+    text-align: center;
+}
+
+.mb-1 {
+    margin-bottom: 0.4rem;
+}
+
+.mb-2 {
+    margin-bottom: 2rem;
+}
+
+.mt-1 {
+    margin-top: 0.4rem;
+}
+
+.mt-2 {
+    margin-top: 2rem;
+}
 
 /* Cards */
 .card {
@@ -312,42 +342,77 @@ body {
 
 /* Print */
 @media print {
-    /* Page breaks */
-    .talhao {
-        page-break-before: always !important;
-        page-break-inside: avoid !important;
-        break-inside: avoid !important;
-    }
-    
-    .talhao:first-of-type {
-        page-break-before: auto !important;
-    }
-    
-    /* Image optimization for PDF size reduction */
-    img, .gallery-image, .header-image {
-        /* Force lower quality rendering to reduce PDF size */
-        image-rendering: -webkit-optimize-contrast;
-        image-rendering: crisp-edges;
-        
-        /* Limit maximum dimensions */
-        max-width: 400px !important;
-        max-height: 300px !important;
-        
-        /* Compress images in PDF */
-    -webkit-print-color-adjust: economy;
-    print-color-adjust: economy;
-    }
-    
-    .gallery-image {
-        /* Gallery images even smaller */
-        max-width: 350px !important;
-        max-height: 200px !important;
-        height: auto !important;
-    }
-    
+
     /* Reduce overall quality to save space */
     * {
-    -webkit-print-color-adjust: economy;
-    print-color-adjust: economy;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
     }
+
+
+    .image-gallery {
+        gap: 0.25rem !important;
+        margin: 0.25rem 0;
+        /* center items inside the grid cells */
+        justify-items: center;
+    }
+
+    img,
+    .gallery-image {
+        /* For print use fixed physical dimensions so images don't resize to
+           fit the page. Use mm to keep consistent print sizes. */
+        width: 80mm !important;
+        height: 60mm !important;
+        object-fit: cover !important;
+        border-radius: 6px !important;
+        max-width: none !important;
+    }
+
+    .gallery-image-wrapper {
+        padding: 0 !important;
+        margin: 0 !important;
+        display: block !important;
+        /* make sure wrappers are centered inside gallery cells */
+        margin-left: auto !important;
+        margin-right: auto !important;
+    }
+
+    .avaliacao {
+        padding: 0.5rem !important;
+        margin-top: 0.5rem !important;
+        font-size: 13px !important;
+        line-height: 1.4 !important;
+        border-radius: 6px !important;
+    }
+
+    .images-and-assessment-group {
+        /* allow group to split if needed; layout will stack by default */
+        page-break-inside: auto !important;
+        break-inside: auto !important;
+        display: block !important;
+    }
+
+    /* Page breaks: force each `talhao` to start on a new printed page so the
+       output contains one talhão per page (plus the home/cover page). */
+    .talhao {
+        page-break-before: auto !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+
+        /* Keep moderate spacing for print */
+        padding: 0.5rem !important;
+        margin-bottom: 0.5rem !important;
+    }
+
+    /* Ensure the page content fits inside the printable area and
+       right margin is not pushed outside the page. Remove any large
+       screen-only widths and shrink padding for print. */
+    body {
+        width: auto !important;
+        padding: 4mm !important;
+        margin: 0 auto !important;
+        box-shadow: none !important;
+        overflow: visible !important;
+    }
+
 }

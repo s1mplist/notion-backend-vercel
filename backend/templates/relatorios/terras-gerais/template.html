@@ -8,13 +8,9 @@
     <link rel="stylesheet" href="styles.css">
     <meta name="color-scheme" content="light">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <style>
-        /* Pequenos ajustes específicos para WeasyPrint, sem alterar o styles.css original */
-        .header img { max-width: 100%; height: auto; }
-    </style>
-    </head>
+</head>
 
-<body class="page-a3">
+<body>
     <!-- Cabeçalho -->
     <header class="header">
         <img src="./images/img_visita_tecnica.jpeg" alt="Banner" loading="eager" decoding="async">
@@ -56,7 +52,7 @@
                     <div class="summary-text">{{ general_info }}</div>
                 </div>
             </div>
-            
+
             <div class="summary-item">
                 <span class="summary-icon">📅</span>
                 <div class="summary-content">
@@ -64,7 +60,7 @@
                     <div class="summary-text">{{ next_visit_date }}</div>
                 </div>
             </div>
-            
+
             <div class="summary-item">
                 <span class="summary-icon">⏱️</span>
                 <div class="summary-content">
@@ -78,7 +74,7 @@
 
     <!-- Talhões -->
     {% for plot in plots %}
-        {% include 'talhao.html' %}
+    {% include 'talhao.html' %}
     {% endfor %}
 
 </body>
