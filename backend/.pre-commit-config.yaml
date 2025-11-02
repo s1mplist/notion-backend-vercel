@@ -4,7 +4,12 @@ repos:
     rev: 0.9.7
     hooks:
       - id: uv-lock
+        # run only when pyproject.toml or uv.lock change
+        files: '(^|/)(pyproject\.toml|uv\.lock)$'
       - id: uv-export
+        # run only when pyproject.toml or uv.lock change
+        files: '(^|/)(pyproject\.toml|uv\.lock)$'
+        args: [--project .\backend\pyproject.toml -o requirements.txt]
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
     rev: v0.14.3
