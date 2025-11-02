@@ -41,6 +41,82 @@ function fetchWithTimeout(url, ms = 15000, init = {}) {
   }).finally(() => clearTimeout(t));
 }
 
+async function inlineOptimizeImagesInHtml(html, baseURL, opts = {}) {
+  // opts: { maxImageWidth, jpegQuality, maxDownloadBytes }
+  const { maxImageWidth = 900, jpegQuality = 0.45, maxDownloadBytes = 10 * 1024 * 1024 } = opts;
+  const imgRegex = /<img\b[^>]*\bsrc=(['"])(.*?)\1[^>]*>/gi;
+  const processed = new Map();
+  let match;
+  // Collect unique srcs first to avoid re-fetching
+  const srcs = [];
+  while ((match = imgRegex.exec(html)) !== null) {
+    const src = match[2];
+    if (!src) continue;
+    if (src.startsWith('data:')) continue;
+    if (!processed.has(src)) {
+      processed.set(src, null);
+      srcs.push(src);
+    }
+  }
+
+  for (const src of srcs) {
+    let resolved;
+    try {
+      resolved = new URL(src, baseURL || undefined).href;
+    } catch (e) {
+      // cannot resolve URL, skip
+      continue;
+    }
+
+    try {
+      const resp = await fetchWithTimeout(resolved, 15000);
+      if (!resp.ok) continue;
+      const len = Number(resp.headers.get('content-length') || '0');
+      if (len && len > maxDownloadBytes * 2) continue;
+      const arrayBuf = await resp.arrayBuffer();
+      const input = Buffer.from(arrayBuf);
+      if (input.length > maxDownloadBytes * 2) continue;
+
+      const img = sharp(input, { limitInputPixels: 268402689 }).rotate();
+      const meta = await img.metadata().catch(() => ({}));
+      const w = meta.width || 0;
+      const h = meta.height || 0;
+
+      const maxDim = Math.max(300, Number(maxImageWidth) || 900);
+      const q = Math.max(30, Math.min(90, Math.round((Number(jpegQuality) || 0.45) * 100)));
+
+      let pipeline = img;
+      if (w && h && (w > maxDim || h > maxDim)) {
+        pipeline = pipeline.resize({
+          width: w >= h ? maxDim : undefined,
+          height: h > w ? maxDim : undefined,
+          fit: 'inside',
+          withoutEnlargement: true,
+          fastShrinkOnLoad: true,
+        });
+      }
+
+      const out = await pipeline.jpeg({ quality: q, mozjpeg: true }).toBuffer();
+      const dataUri = `data:image/jpeg;base64,${out.toString('base64')}`;
+      processed.set(src, dataUri);
+    } catch (e) {
+      // ignore and leave original src
+      processed.set(src, null);
+    }
+  }
+
+  // Replace src attributes with data URIs where available
+  let outHtml = html;
+  for (const [orig, dataUri] of processed.entries()) {
+    if (!dataUri) continue;
+    // escape for regex
+    const esc = orig.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    outHtml = outHtml.replace(new RegExp(`(src=(\\"|\\')${esc}(\\"|\\'))`, 'g'), `src="${dataUri}"`);
+  }
+
+  return outHtml;
+}
+
 module.exports = async (req, res) => {
   // CORS básico
   if (req.method === 'OPTIONS') {
@@ -115,7 +191,7 @@ module.exports = async (req, res) => {
       // Browserless validation does NOT accept custom fields under options like `baseURL`.
       // Inject base URL into the HTML via a <base> tag instead of forwarding it in options.
       let htmlForRemote = html;
-      if (baseURL && typeof baseURL === 'string') {
+  if (baseURL && typeof baseURL === 'string') {
         try {
           const baseTag = `<base href="${baseURL}">`;
           if (/\<head[\s\S]*?\>/i.test(htmlForRemote)) {
@@ -130,6 +206,16 @@ module.exports = async (req, res) => {
           }
         } catch (e) {
           console.warn('[PDF] Failed to inject base tag into HTML for remote renderer', e);
+        }
+      }
+
+      // Inline & optimize remote images into the HTML so Browserless fetches don't
+      // need to reach private/presigned URLs or be blocked; this keeps images in PDFs.
+      if (optimizeImages) {
+        try {
+          htmlForRemote = await inlineOptimizeImagesInHtml(htmlForRemote, baseURL, { maxImageWidth, jpegQuality, maxDownloadBytes });
+        } catch (e) {
+          console.warn('[PDF] inlineOptimizeImagesInHtml failed, continuing without inlining', e);
         }
       }
 
