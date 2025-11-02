@@ -1,0 +1,61 @@
+# .vercelignore - files and folders to skip when deploying to Vercel
+
+# Local editor / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Git
+.git/
+.gitignore
+
+# Node modules & build artifacts (Vercel installs/builds)
+node_modules/
+dist/
+build/
+out/
+.tmp/
+.cache/
+
+# Vercel build output / local Vercel state
+.vercel/
+.vercel_build_output/
+
+# Env & secrets
+.env
+.env.*.local
+.env.local
+.env.production
+.env.development
+.env.test
+.envrc
+
+# Logs, coverage, tests, docs, misc
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+coverage/
+reports/
+*.log
+tests/
+__tests__/
+docs/
+examples/
+scripts/
+
+# Common non-essential files
+README.md
+LICENSE
+
+# Ensure deployment-critical files/folders are included
+!package.json
+!yarn.lock
+!pnpm-lock.yaml
+!vercel.json
+!api/
+!src/
+!index.js
+!server.js
+!package-lock.json
