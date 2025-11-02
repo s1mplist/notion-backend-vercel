@@ -45,6 +45,13 @@ async function inlineOptimizeImagesInHtml(html, baseURL, opts = {}) {
   // opts: { maxImageWidth, jpegQuality, maxDownloadBytes }
   const { maxImageWidth = 900, jpegQuality = 0.45, maxDownloadBytes = 10 * 1024 * 1024 } = opts;
   const imgRegex = /<img\b[^>]*\bsrc=(['"])(.*?)\1[^>]*>/gi;
+  const srcsetRegex = /<img\b[^>]*\bsrcset=(['"])(.*?)\1[^>]*>/gi;
+  const cssUrlRegex = /url\((['"]?)(.*?)\1\)/gi;
+
+  function decodeHtmlEntities(str) {
+    if (!str || typeof str !== 'string') return str;
+    return str.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+  }
   const processed = new Map();
   let match;
   // Collect unique srcs first to avoid re-fetching
@@ -59,23 +66,55 @@ async function inlineOptimizeImagesInHtml(html, baseURL, opts = {}) {
     }
   }
 
-  for (const src of srcs) {
+  // collect srcset urls
+  let sMatch;
+  const srcsetUrls = [];
+  while ((sMatch = srcsetRegex.exec(html)) !== null) {
+    const raw = sMatch[2];
+    if (!raw) continue;
+    // srcset contains comma-separated candidates: "url 1x, url2 2x"
+    const parts = raw.split(',').map(p => p.trim());
+    for (const p of parts) {
+      const urlPart = p.split(/\s+/)[0];
+      if (!urlPart || urlPart.startsWith('data:')) continue;
+      if (!processed.has(urlPart)) {
+        processed.set(urlPart, null);
+        srcsetUrls.push(urlPart);
+      }
+    }
+  }
+
+  // collect CSS url(...) occurrences (inline styles and <style> blocks)
+  const cssUrls = [];
+  let cMatch;
+  while ((cMatch = cssUrlRegex.exec(html)) !== null) {
+    const url = cMatch[2];
+    if (!url) continue;
+    if (url.startsWith('data:')) continue;
+    if (!processed.has(url)) {
+      processed.set(url, null);
+      cssUrls.push(url);
+    }
+  }
+
+  // helper that fetches a remote resource (decoding HTML entities first)
+  async function fetchAndConvert(orig) {
+    const decoded = decodeHtmlEntities(orig);
     let resolved;
     try {
-      resolved = new URL(src, baseURL || undefined).href;
+      resolved = new URL(decoded, baseURL || undefined).href;
     } catch (e) {
-      // cannot resolve URL, skip
-      continue;
+      return null;
     }
 
     try {
       const resp = await fetchWithTimeout(resolved, 15000);
-      if (!resp.ok) continue;
+      if (!resp.ok) return null;
       const len = Number(resp.headers.get('content-length') || '0');
-      if (len && len > maxDownloadBytes * 2) continue;
+      if (len && len > maxDownloadBytes * 2) return null;
       const arrayBuf = await resp.arrayBuffer();
       const input = Buffer.from(arrayBuf);
-      if (input.length > maxDownloadBytes * 2) continue;
+      if (input.length > maxDownloadBytes * 2) return null;
 
       const img = sharp(input, { limitInputPixels: 268402689 }).rotate();
       const meta = await img.metadata().catch(() => ({}));
@@ -98,11 +137,27 @@ async function inlineOptimizeImagesInHtml(html, baseURL, opts = {}) {
 
       const out = await pipeline.jpeg({ quality: q, mozjpeg: true }).toBuffer();
       const dataUri = `data:image/jpeg;base64,${out.toString('base64')}`;
-      processed.set(src, dataUri);
+      processed.set(orig, dataUri);
+      return dataUri;
     } catch (e) {
-      // ignore and leave original src
-      processed.set(src, null);
+      processed.set(orig, null);
+      return null;
     }
+  }
+
+  // process main img srcs
+  for (const src of srcs) {
+    await fetchAndConvert(src);
+  }
+
+  // process srcset URLs
+  for (const s of srcsetUrls) {
+    await fetchAndConvert(s);
+  }
+
+  // process css urls
+  for (const c of cssUrls) {
+    await fetchAndConvert(c);
   }
 
   // Replace src attributes with data URIs where available
