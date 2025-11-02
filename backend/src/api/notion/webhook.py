@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 from datetime import datetime
@@ -6,7 +5,6 @@ from datetime import datetime
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from get_data import process_webhook_data
 from models import GenerationMetadata, WebhookRequest
 
 
@@ -32,21 +30,6 @@ async def webhook(request: Request):
             generation_started_at=datetime.now(),
             generation_status="started",
         )
-
-        async def _bg_process(model: WebhookRequest):
-            try:
-                logger.info(f"Background processing started for webhook: {model.id}")
-                result = await process_webhook_data(gen_meta, model)
-                logger.info(
-                    f"Background processing finished for webhook: {model.id} -> {result.get('pdf_path')}"
-                )
-            except Exception as e:
-                logger.exception(
-                    f"Error in background processing for webhook {model.id}: {e}"
-                )
-
-        # Schedule background processing and return immediately
-        asyncio.create_task(_bg_process(webhook_model))
 
         return JSONResponse(
             status_code=200,

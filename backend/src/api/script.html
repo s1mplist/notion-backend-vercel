@@ -43,11 +43,6 @@
   }
 </style>
 <div id="report-download-bar">
-  <select id="pdf-format">
-    <option value="A4">A4</option>
-    <option value="A3" selected>A3</option>
-    <option value="Letter">Letter</option>
-  </select>
   <label style="display:flex;align-items:center;gap:6px;">
     <input type="checkbox" id="pdf-landscape" /> Paisagem
   </label>
@@ -56,7 +51,6 @@
 <script>
   (function () {
     const btn = document.getElementById('download-pdf-btn');
-    const sel = document.getElementById('pdf-format');
     const chk = document.getElementById('pdf-landscape');
 
     async function buildSnapshotHTML() {
@@ -101,14 +95,14 @@
 
         const html = await buildSnapshotHTML();
         const options = {
-          format: sel.value,
+          format: 'A4',
           landscape: chk.checked,
           printBackground: true,
           preferCSSPageSize: true,
           // otimização dentro do Chromium (não infla request)
           optimizeImages: true,
-          maxImageWidth: 1400,
-          jpegQuality: 0.7,
+          maxImageWidth: 1000,
+          jpegQuality: 0.8,
           baseURL: window.location.origin
         };
 
