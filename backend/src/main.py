@@ -15,7 +15,38 @@ from api.relatorios import report_by_template
 from core.config import settings
 
 
-locale.setlocale(locale.LC_ALL, "pt_BR.UTF-8")
+def _try_set_locale(preferred_locales):
+    """Try to set the first available locale from preferred_locales.
+
+    Returns the locale string that was successfully set, or None if none worked.
+    """
+    for loc in preferred_locales:
+        try:
+            locale.setlocale(locale.LC_ALL, loc)
+            return loc
+        except Exception:
+            # ignore and try next
+            continue
+    return None
+
+
+# Attempt to set a Portuguese (Brazil) locale but don't crash if the
+# environment doesn't support it (some serverless/container images don't).
+_preferred_locales = [
+    "pt_BR.UTF-8",
+    "pt_BR.utf8",
+    "pt_BR",
+    # Windows variant (if someone runs locally on Windows)
+    "Portuguese_Brazil.1252",
+]
+_selected_locale = _try_set_locale(_preferred_locales)
+if _selected_locale is None:
+    # Logging isn't configured yet — use print to avoid raising during import.
+    # It's expected on some hosts (e.g. minimal containers) that pt_BR isn't available.
+    try:
+        print("Warning: could not set pt_BR locale; continuing with default locale.")
+    except Exception:
+        pass
 
 
 try:
