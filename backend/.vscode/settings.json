@@ -1,0 +1,12 @@
+{
+  // Add backend/src to the python analysis and terminal PYTHONPATH so
+  // absolute imports like `api.health` resolve when running from the
+  // workspace root or the backend folder.
+  "python.analysis.extraPaths": ["./backend/src"],
+  "terminal.integrated.env.windows": {
+    "PYTHONPATH": "${workspaceFolder}/backend/src"
+  },
+  // Point the envFile to the backend .env so the debugger and integrated
+  // terminal load backend-specific variables.
+  "python.envFile": "${workspaceFolder}/backend/.env"
+}
