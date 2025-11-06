@@ -1,14 +1,9 @@
-"""
-Service for extracting and processing plot data from Notion pages.
-"""
-
-import logging
-
 from services.notion.notion_service import NotionService
-from utils.notion import normalize_prop_name
+from utils.logging import get_logger
+from utils.notion import NotionUtils
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class PlotDataExtractor:
@@ -16,6 +11,7 @@ class PlotDataExtractor:
 
     def __init__(self):
         self.notion_service = NotionService()
+        self.notion_utils = NotionUtils()
 
     async def extract_plots_data(self, report_id: str) -> list[dict]:
         """
@@ -95,17 +91,17 @@ class PlotDataExtractor:
         """Find the photos property key for a given talhao number."""
         # Try to find the fotos property in a case-insensitive way and support variations
 
-        target1_norm = normalize_prop_name(f"Upload de fotos - {talhao_number:02d}")
-        target2_norm = normalize_prop_name(f"Upload de fotos - {talhao_number}")
+        target1_norm = self.notion_utils.normalize_prop_name(f"Upload de fotos - {talhao_number:02d}")
+        target2_norm = self.notion_utils.normalize_prop_name(f"Upload de fotos - {talhao_number}")
 
         for k in properties.keys():
-            kn = normalize_prop_name(k)
+            kn = self.notion_utils.normalize_prop_name(k)
             if kn == target1_norm or kn == target2_norm:
                 return k
 
         # Also support keys that start with the prefix (handles small variations)
         for k in properties.keys():
-            kn = normalize_prop_name(k)
+            kn = self.notion_utils.normalize_prop_name(k)
             if kn.startswith(target1_norm) or kn.startswith(target2_norm):
                 return k
 

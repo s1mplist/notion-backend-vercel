@@ -2,12 +2,13 @@
 
 import base64
 import io
-import logging
 
 from PIL import Image
 
+from utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+
+logger = get_logger(__name__)
 
 
 def optimize_base64_image(

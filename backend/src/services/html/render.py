@@ -1,18 +1,19 @@
 import asyncio
 import hashlib
-import logging
 import os
 from datetime import datetime
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound, select_autoescape
 
-from core.config import settings
+from config import get_settings
 from models.report import Report
 from utils.html import inline_assets
+from utils.logging import get_logger
 
 
-logger = logging.getLogger(__name__)
+settings = get_settings()
+logger = get_logger(__name__)
 
 
 class HTMLRenderer:
@@ -29,7 +30,7 @@ class HTMLRenderer:
 
     def __init__(self) -> None:
         templates_dir = self._locate_templates_dir()
-        self.templates_root = templates_dir  # Define templates_root for use elsewhere
+        self.templates_root = templates_dir
         self.env = Environment(
             loader=FileSystemLoader(str(templates_dir)),
             autoescape=select_autoescape(["html", "xml"]),

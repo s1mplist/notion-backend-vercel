@@ -1,35 +1,14 @@
-"""
-Service for managing farm, consultant and plot metadata from Notion databases.
-
-This service allows you to store and retrieve complementary data that is not
-in the main report page, such as farm details, consultant info, and plot specifications.
-
-Setup:
-1. Create databases in Notion:
-   - "Fazendas" database with properties: Nome, Proprietário, Cidade, etc.
-   - "Consultores" database with properties: Nome, Email, Telefone, etc.
-   - "Talhões" database with properties: Nome, Área, Variedade, Fazenda (relation), etc.
-
-2. Add database IDs to your .env:
-   NOTION_FARMS_DATABASE_ID=xxx
-   NOTION_CONSULTANTS_DATABASE_ID=xxx
-   NOTION_PLOTS_DATABASE_ID=xxx
-
-3. Use this service to fetch metadata:
-   metadata_service = MetadataService()
-   farm_data = await metadata_service.get_farm_by_name("Fazenda São José")
-"""
-
-import logging
 from typing import Any
 
 from notion_client import AsyncClient
 
-from core.config import settings
+from config import get_settings
+from utils.logging import get_logger
 from utils.notion import extract_text
 
 
-logger = logging.getLogger(__name__)
+settings = get_settings()
+logger = get_logger(__name__)
 
 
 class MetadataService:
