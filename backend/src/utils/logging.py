@@ -6,7 +6,10 @@ import logging
 import os
 from pathlib import Path
 
-from core.config import settings
+from config import get_settings
+
+
+settings = get_settings()
 
 
 def setup_logging():
@@ -41,15 +44,9 @@ def setup_logging():
         level=log_level,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=handlers,
-        force=True,  # Override any existing configuration
+        force=True,
     )
 
-    # Set specific loggers to WARNING to reduce noise
-    logging.getLogger("notion_client").setLevel(logging.WARNING)
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("httpcore").setLevel(logging.WARNING)
-
-    # Log configuration info
     logger = get_logger(__name__)
     logger.info(f"Logging configured with level: {settings.log_level}")
     logger.info(f"Environment: {'Serverless' if is_serverless else 'Local'}")

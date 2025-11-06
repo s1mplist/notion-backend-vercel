@@ -1,12 +1,13 @@
 """HTML manipulation utilities."""
 
 import base64
-import logging
 import mimetypes
 from pathlib import Path
 
+from utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+
+logger = get_logger(__name__)
 
 
 def data_uri_for_local_image(template_dir: Path, rel_path: str) -> str | None:
