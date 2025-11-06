@@ -1,37 +1,20 @@
 import functools
-import logging
 from datetime import date, datetime
 
 from notion_client import AsyncClient
 
-from core.config import settings
+from config import get_settings
 from models.generation import GenerationMetadata
 from utils.json import to_json_string
+from utils.logging import get_logger
 
 
-logger = logging.getLogger(__name__)
+settings = get_settings()
+logger = get_logger(__name__)
 
 
 class NotionWriter:
     """Service for writing data to Notion databases."""
-
-    @staticmethod
-    async def _get_title_property_name(notion: AsyncClient, database_id: str) -> str:
-        """Detect the title property name for a Notion database.
-
-        Falls back to "Name" if detection fails.
-        """
-        try:
-            db = await notion.databases.retrieve(database_id=database_id)
-            props = db.get("properties", {}) or {}
-            for name, schema in props.items():
-                if schema.get("type") == "title":
-                    return name
-        except Exception as e:
-            logger.exception(
-                f"Failed to retrieve title property name for database {database_id}: {e}"
-            )
-        return "Name"
 
     @staticmethod
     def _build_children_blocks(

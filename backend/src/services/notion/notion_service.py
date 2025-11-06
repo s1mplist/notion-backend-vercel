@@ -1,11 +1,19 @@
 from __future__ import annotations
 
-import logging
-from typing import Any
+import asyncio
+import re
+from typing import Any, List
 
-from notion_client import Client
+from notion_client import AsyncClient, Client
 
-from core.config import settings
+from config import get_settings
+from models.report import Image, Plot
+from utils.logging import get_logger
+from utils.notion import NotionUtils
+
+
+settings = get_settings()
+logger = get_logger(__name__)
 
 
 class NotionService:
@@ -13,39 +21,137 @@ class NotionService:
 
     def __init__(self):
         self.client = Client(auth=settings.notion_token)
+        self.async_client = AsyncClient(auth=settings.notion_token)
+        self.notion_utils = NotionUtils()
+
+        logger.info("NotionService initialized.")
+
+    async def aclose(self) -> None:
+        """Fechar AsyncClient explicitamente (chamar no shutdown do app)."""
+        try:
+            await self.async_client.aclose()
+            logger.info("AsyncClient closed successfully.")
+        except Exception as e:
+            logger.warning(f"Error closing AsyncClient: {e}")
+
+    def close(self) -> None:
+        """Fechar Client se necessário (sync)."""
+        try:
+            # Client does not always expose close; proteger por segurança
+            if hasattr(self.client, "close"):
+                self.client.close()
+                logger.info("Client closed successfully.")
+        except Exception as e:
+            logger.warning(f"Error closing Client: {e}")
 
     # -----------------------
-    # Data Source Operations
+    # Page retrieval
+    # -----------------------
+    def get_page(self, page_id: str) -> dict[str, Any]:
+        """Retrieve a single page by ID (sync)."""
+        return self.client.pages.retrieve(page_id)
+
+    async def async_get_page(self, page_id: str) -> dict[str, Any]:
+        """Async wrapper to retrieve a Notion page using shared async_client."""
+        return await self.async_client.pages.retrieve(page_id=page_id)
+
+    def get_pages(self, page_ids: list[str]) -> list[dict[str, Any]]:
+        """Retrieve multiple pages by IDs (sync)."""
+        logger.info(f"Retrieving multiple pages: {page_ids}")
+        pages = [self.get_page(pid) for pid in page_ids]
+        logger.info(f"Retrieved {len(pages)} pages.")
+        return pages
+
+    async def async_get_pages(self, page_ids: list[str]) -> list[dict[str, Any]]:
+        """Retrieve multiple pages by IDs (async)."""
+        logger.info(f"Async retrieving multiple pages: {page_ids}")
+        tasks = [self.async_get_page(pid) for pid in page_ids]
+        pages = await asyncio.gather(*tasks, return_exceptions=False)
+        logger.info(f"Async retrieved {len(pages)} pages.")
+        return pages
+
+    # -----------------------
+    # Data Source (query) wrappers
+    # -----------------------
+    def query_data_source(
+        self, data_source_id: str, query: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Sync wrapper to query a Notion data source using shared client."""
+        if query:
+            return self.client.data_sources.query(data_source_id, **query)
+        return self.client.data_sources.query(data_source_id)
+
+    async def async_query_data_source(
+        self, data_source_id: str, query: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Async wrapper to query a Notion data source using shared async_client."""
+        if query:
+            return await self.async_client.data_sources.query(data_source_id, **query)
+        return await self.async_client.data_sources.query(data_source_id)
+
+    # -----------------------
+    # Data source IDs helpers
     # -----------------------
     def get_data_source_id(self, database_id: str) -> str:
-        """Get the first data source ID from a database."""
+        """Get the first data source ID from a database (sync)."""
         db = self.client.databases.retrieve(database_id)
         ds_list = db.get("data_sources") or []
+
+        logger.info(f"Retrieved data sources for database {database_id}: {ds_list}")
+
         if not ds_list:
+            logger.error(f"Database {database_id} has no data sources.")
             raise RuntimeError(f"Database {database_id} does not have data_sources.")
         return ds_list[0]["id"]
 
-    def query_data_source(
-        self, data_source_id: str, query: dict[str, Any]
-    ) -> dict[str, Any]:
-        """Execute a query on a data source."""
-        return self.client.data_sources.query(data_source_id, **query)
+    async def async_get_data_source_id(self, database_id: str) -> str:
+        """Get the first data source ID from a database (async)."""
+        db = await self.async_client.databases.retrieve(database_id=database_id)
+        ds_list = db.get("data_sources") or []
+
+        logger.info(f"Async retrieved data sources for database {database_id}: {ds_list}")
+
+        if not ds_list:
+            logger.error(f"Database {database_id} has no data sources (async).")
+            raise RuntimeError(f"Database {database_id} does not have data_sources.")
+        return ds_list[0]["id"]
 
     def get_fact_and_talhoes_data_sources(self) -> tuple[str, str]:
-        """Get data source IDs for FACT and Talhões databases."""
+        """Get data source IDs for FACT and Talhões databases (sync)."""
+        logger.info("Getting data source IDs for FACT and Talhões databases (sync).")
         fact_ds_id = self.get_data_source_id(settings.notion_fact_database_id)
         talhoes_ds_id = self.get_data_source_id(settings.notion_talhoes_database_id)
         return fact_ds_id, talhoes_ds_id
 
-    # -----------------------
-    # Page Operations
-    # -----------------------
-    def get_page(self, page_id: str) -> dict[str, Any]:
-        """Retrieve a single page by ID."""
-        return self.client.pages.retrieve(page_id)
+    async def async_get_fact_and_talhoes_data_sources(self) -> tuple[str, str]:
+        """Asynchronously get data source IDs for FACT and Talhões databases (async)."""
+        fact_ds_id = await self.async_get_data_source_id(settings.notion_fact_database_id)
+        talhoes_ds_id = await self.async_get_data_source_id(settings.notion_talhoes_database_id)
+        logger.info("Async retrieved data source IDs for FACT and Talhões databases.")
+        return fact_ds_id, talhoes_ds_id
 
+    async def get_data_source_ids(self) -> tuple[str, str]:
+        """Legacy async helper that retrieves data source IDs using an async context."""
+        async with self.async_client as notion:
+            fact_db = await notion.databases.retrieve(
+                database_id=settings.notion_fact_database_id
+            )
+
+            talhoes_db = await notion.databases.retrieve(
+                database_id=settings.notion_talhoes_database_id
+            )
+
+        logger.info("Retrieved data source IDs for FACT and Talhões databases.")
+
+        fact_ds_id = fact_db["data_sources"][0]["id"]
+        talhoes_ds_id = talhoes_db["data_sources"][0]["id"]
+        return fact_ds_id, talhoes_ds_id
+
+    # -----------------------
+    # Page blocks (paginated)
+    # -----------------------
     def get_page_blocks(self, block_id: str) -> list[dict[str, Any]]:
-        """Retrieve all child blocks for a given page or block (paginated)."""
+        """Retrieve all child blocks for a given page or block (paginated) (sync)."""
         results: list[dict[str, Any]] = []
         start_cursor: str | None = None
         while True:
@@ -60,127 +166,46 @@ class NotionService:
                 break
         return results
 
-    def get_pages(self, page_ids: list[str]) -> list[dict[str, Any]]:
-        """Retrieve multiple pages by IDs."""
-        pages = []
-        for pid in page_ids:
-            try:
-                pages.append(self.get_page(pid))
-            except Exception as exc:
-                logging.error(f"Falha ao obter página {pid}: {exc}")
-        return pages
-
-    def resolve_page_title(self, page_id: str) -> str | None:
-        """Get the title property value from a page."""
-        try:
-            page = self.get_page(page_id)
-            props = page.get("properties") or {}
-            for v in props.values():
-                if v.get("type") == "title":
-                    return self._extract_title(v)
-        except Exception:
-            pass
-        return None
+    async def async_get_page_blocks(self, block_id: str) -> list[dict[str, Any]]:
+        """Async version of get_page_blocks (paginação) para evitar bloqueio."""
+        results: list[dict[str, Any]] = []
+        start_cursor: str | None = None
+        while True:
+            resp = await self.async_client.blocks.children.list(block_id=block_id, start_cursor=start_cursor)
+            results.extend(resp.get("results", []))
+            if not resp.get("has_more"):
+                break
+            start_cursor = resp.get("next_cursor")
+            if not start_cursor:
+                break
+        return results
 
     # -----------------------
-    # Property Extractors
-    # -----------------------
-    def _plain_text(self, rich: list[dict[str, Any]]) -> str:
-        """Extract plain text from rich text array."""
-        return "".join((t.get("plain_text") or "") for t in (rich or []))
-
-    def _extract_title(self, prop: dict[str, Any]) -> str:
-        return self._plain_text(prop.get("title") or [])
-
-    def _extract_rich_text(self, prop: dict[str, Any]) -> str:
-        return self._plain_text(prop.get("rich_text") or [])
-
-    def _extract_relation_ids(self, prop: dict[str, Any]) -> list[str]:
-        rel = prop.get("relation") or []
-        return [r.get("id", "").replace("-", "") for r in rel if r.get("id")]
-
-    def _extract_select(self, prop: dict[str, Any]) -> str | None:
-        sel = prop.get("select")
-        return sel["name"] if sel else None
-
-    def _extract_multi_select(self, prop: dict[str, Any]) -> list[str]:
-        return [s["name"] for s in (prop.get("multi_select") or [])]
-
-    def _extract_date(self, prop: dict[str, Any]) -> dict[str, str | None]:
-        d = prop.get("date") or {}
-        return {"start": d.get("start"), "end": d.get("end")}
-
-    def _extract_files(self, prop: dict[str, Any]) -> list[str]:
-        files = []
-        for f in prop.get("files") or []:
-            if f.get("type") == "file":
-                files.append(f["file"]["url"])
-            elif f.get("type") == "external":
-                files.append(f["external"]["url"])
-        return files
-
-    def _simplify_property(self, prop: dict[str, Any]) -> Any:
-        """Convert a Notion property to a simplified value."""
-        ptype = prop.get("type")
-        if ptype == "title":
-            return self._extract_title(prop)
-        if ptype == "rich_text":
-            return self._extract_rich_text(prop)
-        if ptype == "number":
-            return prop.get("number")
-        if ptype == "select":
-            return self._extract_select(prop)
-        if ptype == "multi_select":
-            return self._extract_multi_select(prop)
-        if ptype == "relation":
-            return self._extract_relation_ids(prop)
-        if ptype == "people":
-            return [p.get("name") for p in (prop.get("people") or [])]
-        if ptype == "date":
-            return self._extract_date(prop)
-        if ptype == "checkbox":
-            return prop.get("checkbox")
-        if ptype == "url":
-            return prop.get("url")
-        if ptype == "email":
-            return prop.get("email")
-        if ptype == "phone_number":
-            return prop.get("phone_number")
-        if ptype == "status":
-            s = prop.get("status")
-            return s.get("name") if s else None
-        if ptype == "files":
-            return self._extract_files(prop)
-        return prop.get(ptype)
-
-    # -----------------------
-    # Page Parsing
+    # Page normalization / parsing
     # -----------------------
     def simplify_page(self, page: dict[str, Any]) -> dict[str, Any]:
-        """Convert a Notion page to a simplified dictionary."""
+        """Normalize a Notion page to a simple dict (id + simplified properties)."""
+        simplified: dict[str, Any] = {"id": page.get("id")}
         props = page.get("properties") or {}
-        simple = {k: self._simplify_property(v) for k, v in props.items()}
-
-        # Add metadata
-        title = None
-        for k, v in props.items():
-            if v.get("type") == "title":
-                title = self._extract_title(v)
-                break
-
-        simple["_id"] = page.get("id", "").replace("-", "")
-        simple["_url"] = page.get("url")
-        if title is not None:
-            simple["_title"] = title
-
-        return simple
+        for key, prop in props.items():
+            try:
+                value = self.notion_utils.simplify_property(prop)
+            except Exception:
+                # em caso de erro no helper, keep raw prop for debugging
+                logger.exception(f"Error simplifying property {key!r}")
+                value = prop
+            # se for título, guarda também em _title para compatibilidade
+            if isinstance(prop, dict) and prop.get("type") == "title":
+                simplified["_title"] = value
+            simplified[key] = value
+        return simplified
 
     def parse_data_source_results(
         self, ds_result: dict[str, Any]
     ) -> list[dict[str, Any]]:
         """Parse data source query results into simplified pages."""
-        items = []
-        for res in ds_result.get("results") or []:
+        items: list[dict[str, Any]] = []
+        for res in (ds_result.get("results") if isinstance(ds_result, dict) else ds_result) or []:
             page = res.get("page") if isinstance(res, dict) and "page" in res else res
             if not isinstance(page, dict):
                 continue
@@ -190,26 +215,54 @@ class NotionService:
     # -----------------------
     # Domain-Specific Queries
     # -----------------------
+    async def async_query_fact_by_page_id(
+        self, fact_ds_id: str, page_id: str
+    ) -> list[dict[str, Any]]:
+        """Async version of query_fact_by_page_id."""
+        query = {"filter": {"property": "title", "rich_text": {"contains": page_id}}}
+        result = await self.async_query_data_source(fact_ds_id, query)
+        return self.parse_data_source_results(result)
+
     def query_fact_by_page_id(
         self, fact_ds_id: str, page_id: str
     ) -> list[dict[str, Any]]:
-        """Query FACT data source by page ID."""
+        """Query FACT data source by page ID (sync)."""
         query = {"filter": {"property": "title", "rich_text": {"contains": page_id}}}
         result = self.query_data_source(fact_ds_id, query)
+        return self.parse_data_source_results(result)
+
+    async def async_query_talhoes_by_farm_id(
+        self, talhoes_ds_id: str, farm_id: str
+    ) -> list[dict[str, Any]]:
+        """Async version of query Talhões by single farm id."""
+        query = {"filter": {"property": "farm", "relation": {"contains": farm_id}}}
+        result = await self.async_query_data_source(talhoes_ds_id, query)
         return self.parse_data_source_results(result)
 
     def query_talhoes_by_farm_id(
         self, talhoes_ds_id: str, farm_id: str
     ) -> list[dict[str, Any]]:
-        """Query Talhões data source by farm relation ID."""
+        """Query Talhões data source by farm relation ID (sync)."""
         query = {"filter": {"property": "farm", "relation": {"contains": farm_id}}}
         result = self.query_data_source(talhoes_ds_id, query)
         return self.parse_data_source_results(result)
 
+    async def async_query_talhoes_by_farm_ids(
+        self, talhoes_ds_id: str, farm_ids: list[str]
+    ) -> list[dict[str, Any]]:
+        """Async version of query_talhoes_by_farm_ids."""
+        all_talhoes: list[dict[str, Any]] = []
+        for farm_id in farm_ids:
+            query = {"filter": {"property": "farm", "relation": {"contains": farm_id}}}
+            result = await self.async_query_data_source(talhoes_ds_id, query)
+            talhoes = self.parse_data_source_results(result)
+            all_talhoes.extend(talhoes)
+        return all_talhoes
+
     def query_talhoes_by_farm_ids(
         self, talhoes_ds_id: str, farm_ids: list[str]
     ) -> list[dict[str, Any]]:
-        """Query Talhões data source by multiple farm IDs."""
+        """Query Talhões data source by multiple farm IDs (sync)."""
         all_talhoes = []
         for farm_id in farm_ids:
             talhoes = self.query_talhoes_by_farm_id(talhoes_ds_id, farm_id)
@@ -245,14 +298,13 @@ class NotionService:
             # Convert area string from Brazilian decimal format (comma as decimal separator) to float-compatible format.
             if isinstance(area, str):
                 area = area.replace(",", ".")
-                area = area.replace(",", ".")
 
             try:
                 area_float = float(area) if area else 0.0
                 if area_float > 0:
                     areas.append(area_float)
             except (ValueError, TypeError) as e:
-                logging.debug(f"Failed to parse area '{area}' for talhão '{name}': {e}")
+                logger.debug(f"Failed to parse area '{area}' for talhão '{name}': {e}")
 
         return {
             "quantidade_talhoes": total,
@@ -269,3 +321,114 @@ class NotionService:
         if not isinstance(farm_ids, list):
             farm_ids = [farm_ids] if farm_ids else []
         return farm_ids
+
+    # -----------------------
+    # Helpers: merge plot metadata + images
+    # -----------------------
+    def merge_plot_data(
+        self, talhoes_data: list[dict], plots_with_images: list[dict]
+    ) -> list[Plot]:
+        """
+        Merge talhões metadata with plot images.
+
+        Args:
+            talhoes_data: List of talhão metadata (name, area, etc.) - includes page_id/id_talhao from Notion
+            plots_with_images: List of plots with images extracted from page properties - includes id (talhao id) and/or name
+
+        Returns:
+            List of Plot objects with complete data (only plots that have an assessment text).
+        """
+        merged_plots: list[Plot] = []
+
+        images_map_by_talhao_id: dict[str, dict] = {}
+        images_map_by_name: dict[str, dict] = {}
+
+        for plot in plots_with_images or []:
+            talhao_id = plot.get("id")
+            if talhao_id:
+                images_map_by_talhao_id[talhao_id] = plot
+
+            plot_names = plot.get("name") or []
+            if isinstance(plot_names, (list, tuple)):
+                for name in plot_names:
+                    if name:
+                        images_map_by_name[str(name)] = plot
+            elif plot_names:
+                images_map_by_name[str(plot_names)] = plot
+
+        logger.debug(
+            "Images mapped by talhao_id: %s", list(images_map_by_talhao_id.keys())
+        )
+        logger.debug("Images mapped by name: %s", list(images_map_by_name.keys()))
+
+        def _talhao_index(t: dict) -> int:
+            tid = str(t.get("id_talhao", ""))
+            m = re.search(r"(\d+)", tid)
+            return int(m.group(1)) if m else 10_000
+
+        talhoes_sorted = sorted(talhoes_data or [], key=_talhao_index)
+
+        for talhao in talhoes_sorted:
+            talhao_id = str(talhao.get("id_talhao", "") or "")
+            talhao_name = talhao.get("nome_talhao") or talhao_id or talhao.get("_title") or talhao.get("name") or ""
+            area_val = talhao.get("area", 0.0) or 0.0
+            if isinstance(area_val, str):
+                area_val = area_val.strip().replace(",", ".")
+            try:
+                area_float = float(area_val)
+            except (ValueError, TypeError):
+                area_float = 0.0
+
+            image_data: dict = {}
+            if talhao_id and talhao_id in images_map_by_talhao_id:
+                image_data = images_map_by_talhao_id[talhao_id]
+                logger.debug("Matched talhão '%s' by ID: %s", talhao_name, talhao_id)
+            elif talhao_name and talhao_name in images_map_by_name:
+                image_data = images_map_by_name[talhao_name]
+                logger.debug("Matched talhão '%s' by name", talhao_name)
+            else:
+                # don't fallback by position to avoid cross-farm mixing
+                image_data = {}
+
+            images_list: List[Image] = []
+            for img in image_data.get("images", []) if isinstance(image_data.get("images", []), (list, tuple)) else []:
+                images_list.append(
+                    Image(url=img.get("url", "") or "", description=img.get("name") or None)
+                )
+
+            assessment_raw = image_data.get("assessment", "")
+            if isinstance(assessment_raw, list):
+                assessment_text = (assessment_raw[0] or "").strip() if assessment_raw else ""
+            else:
+                assessment_text = str(assessment_raw or "").strip()
+
+            if not assessment_text:
+                # skip plots without assessment
+                continue
+
+            additional_images_val = image_data.get("additional_images")
+            if isinstance(additional_images_val, list):
+                additional_images_val = ", ".join([str(x) for x in additional_images_val if x]) or None
+            elif additional_images_val is not None:
+                additional_images_val = str(additional_images_val).strip() or None
+
+            growth_stage = ""
+            gs = image_data.get("growth_stage")
+            if isinstance(gs, (list, tuple)):
+                growth_stage = gs[0] if gs else ""
+            elif gs:
+                growth_stage = str(gs)
+
+            plot = Plot(
+                id=talhao_name,
+                area=area_float,
+                growth_stage=growth_stage,
+                crop=talhao.get("cultura", "") or "",
+                variety=talhao.get("variedade", "") or "",
+                images=images_list,
+                additional_images=additional_images_val,
+                assessment=assessment_text,
+            )
+            merged_plots.append(plot)
+
+        return merged_plots

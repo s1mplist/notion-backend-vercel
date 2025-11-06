@@ -1,8 +1,10 @@
-from datetime import datetime
 from typing import Any
 
-from models.report import Image, Plot, Report
-from utils.notion import extract_text
+from models.report import Image, Plot
+from utils.logging import get_logger
+
+
+logger = get_logger(__name__)
 
 
 class NotionDataMapper:
@@ -64,7 +66,6 @@ class NotionDataMapper:
             ):
                 return bool(val)
 
-            # Fallback: consider truthiness
             return bool(val)
 
         filtered: dict[str, Any] = {}
@@ -73,7 +74,6 @@ class NotionDataMapper:
                 if has_value(v):
                     filtered[k] = v
             except Exception:
-                # If unknown structure, keep conservative: include if non-empty
                 if v:
                     filtered[k] = v
 
@@ -91,8 +91,6 @@ class NotionDataMapper:
                 if url:
                     images.append(Image(url=url, description=file.get("name", "")))
         return images
-
-    # normalize_prop_name, extract_text, extract_date agora estão em src.utils.notion_utils
 
     @classmethod
     def map_plot(cls, plot_data: dict[str, Any]) -> Plot:
@@ -113,56 +111,4 @@ class NotionDataMapper:
             assessment=plot_data.get("assessment", [""])[0]
             if plot_data.get("assessment")
             else "",
-        )
-
-    @classmethod
-    def map_to_report(
-        cls, notion_data: dict[str, Any], plots_data: list[dict[str, Any]]
-    ) -> Report:
-        """Map Notion data to Report model (ignore empty fields)"""
-        props = notion_data.get("properties", {})
-
-        # Extrair textos das propriedades rich_text
-        informacoes = extract_text(
-            props.get("Informações Gerais", {}).get("rich_text", [])
-        )
-        cronograma = extract_text(
-            props.get("Cronograma de Operações da Fazenda", {}).get("rich_text", [])
-        )
-
-        # Extrair datas
-        data_visita = extract_text(props.get("Data da Visita", {}).get("rich_text", []))
-        data_retorno = extract_text(
-            props.get("Data de Retorno (Prevista)", {}).get("rich_text", [])
-        )
-
-        # Converter strings de data para objetos datetime
-        try:
-            current_visit_date = datetime.strptime(data_visita, "%d/%m/%Y")
-        except (ValueError, TypeError):
-            current_visit_date = datetime.now()
-
-        try:
-            next_visit_date = datetime.strptime(data_retorno, "%d/%m/%Y")
-        except (ValueError, TypeError):
-            next_visit_date = datetime.now()
-
-        # Mapear plots
-        mapped_plots = [
-            cls.map_plot(plot)
-            for plot in (plots_data if isinstance(plots_data, list) else [])
-        ]
-
-        return Report(
-            farm_name="",  # Será preenchido posteriormente
-            consultant_name="",  # Será preenchido posteriormente
-            report_month=current_visit_date.strftime("%B %Y"),
-            owner_name="",  # Será preenchido posteriormente
-            farm_city="",  # Será preenchido posteriormente
-            harvest_period="2025/2026",  # Default value or will be filled in later
-            general_info=informacoes,
-            next_visit_date=next_visit_date,
-            current_visit_date=current_visit_date,
-            operations_schedule=cronograma,
-            plots=mapped_plots,
         )

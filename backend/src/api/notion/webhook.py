@@ -1,14 +1,15 @@
 import json
-import logging
 from datetime import datetime
 
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from models import GenerationMetadata, WebhookRequest
+from models.generation import GenerationMetadata
+from models.webhook import WebhookRequest
+from utils.logging import get_logger
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 async def webhook(request: Request):
