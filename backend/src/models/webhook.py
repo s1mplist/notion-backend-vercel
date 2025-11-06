@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 
 class WebhookRequest(BaseModel):
@@ -52,89 +52,6 @@ class WebhookRequest(BaseModel):
         default_factory=dict, description="Additional, event-specific data."
     )
 
-    @field_validator("type")
-    @classmethod
-    def validate_event_type(cls, v):
-        """Validate event type format."""
-        if not v or "." not in v:
-            raise ValueError(
-                'Event type must be in format "object.action" (e.g., "page.created")'
-            )
-
-        valid_objects = ["page", "block", "database"]
-        valid_actions = ["created", "updated", "deleted"]
-
-        parts = v.split(".")
-        if len(parts) != 2:
-            raise ValueError("Event type must have exactly one dot separator")
-
-        obj_type, action = parts
-        if obj_type not in valid_objects:
-            raise ValueError(f"Object type must be one of: {valid_objects}")
-        if action not in valid_actions:
-            raise ValueError(f"Action must be one of: {valid_actions}")
-
-        return v
-
-    @field_validator("entity")
-    @classmethod
-    def validate_entity(cls, v):
-        """Validate entity structure."""
-        if not isinstance(v, dict):
-            raise ValueError("Entity must be a dictionary")
-
-        required_fields = ["id", "type"]
-        for field in required_fields:
-            if field not in v:
-                raise ValueError(f'Entity must contain "{field}" field')
-
-        if not v["id"]:
-            raise ValueError("Entity ID cannot be empty")
-
-        valid_entity_types = ["page", "block", "database"]
-        if v["type"] not in valid_entity_types:
-            raise ValueError(f"Entity type must be one of: {valid_entity_types}")
-
-        return v
-
-    @field_validator("authors")
-    @classmethod
-    def validate_authors(cls, v):
-        """Validate authors structure."""
-        if not isinstance(v, list) or not v:
-            raise ValueError("Authors must be a non-empty list")
-
-        for author in v:
-            if not isinstance(author, dict):
-                raise ValueError("Each author must be a dictionary")
-
-            required_fields = ["id", "type"]
-            for field in required_fields:
-                if field not in author:
-                    raise ValueError(f'Author must contain "{field}" field')
-
-            valid_author_types = ["person", "bot", "agent"]
-            if author["type"] not in valid_author_types:
-                raise ValueError(f"Author type must be one of: {valid_author_types}")
-
-        return v
-
-    def get_entity_id(self) -> str:
-        """Get entity ID safely."""
-        return self.entity.get("id", "")
-
     def get_entity_type(self) -> str:
         """Get entity type safely."""
         return self.entity.get("type", "")
-
-    def is_page_event(self) -> bool:
-        """Check if this is a page-related event."""
-        return self.get_entity_type() == "page"
-
-    def is_create_event(self) -> bool:
-        """Check if this is a creation event."""
-        return self.type.endswith(".created")
-
-    def is_update_event(self) -> bool:
-        """Check if this is an update event."""
-        return self.type.endswith(".updated")

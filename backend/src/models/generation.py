@@ -5,7 +5,6 @@ from pydantic import BaseModel, Field
 
 
 class GenerationMetadata(BaseModel):
-    webhook_id: UUID = Field(description="The unique ID of the webhook event")
     webhook_timestamp: datetime = Field(
         description="ISO 8601 formatted time at which the event occurred. This field can be used to order events on your side"
     )

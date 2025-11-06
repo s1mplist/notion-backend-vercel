@@ -1,7 +1,4 @@
-import asyncio
 import locale
-import logging
-import sys
 from datetime import datetime
 
 from fastapi import FastAPI
@@ -12,53 +9,36 @@ from api.notion.webhook import webhook
 from api.relatorios import report_by_template
 
 # Configuration
-from core.config import settings
+from config import get_settings
+from utils.logging import get_logger
 
 
-def _try_set_locale(preferred_locales):
-    """Try to set the first available locale from preferred_locales.
+settings = get_settings()
+logger = get_logger(__name__)
 
-    Returns the locale string that was successfully set, or None if none worked.
-    """
+
+def _try_set_locale():
+    preferred_locales = [
+        "pt_BR.UTF-8",
+        "pt_BR.utf8",
+        "pt_BR",
+    ]
+
+    logger.debug(f"Attempting to set locale from preferred list: {preferred_locales}")
+
     for loc in preferred_locales:
         try:
             locale.setlocale(locale.LC_ALL, loc)
+            logger.info(f"Locale set successfully: {loc}")
             return loc
         except Exception:
-            # ignore and try next
             continue
-    return None
+    logger.warning("No suitable locale found; defaulting to 'C.UTF-8'")
+    return "C.UTF-8"
 
 
-# Attempt to set a Portuguese (Brazil) locale but don't crash if the
-# environment doesn't support it (some serverless/container images don't).
-_preferred_locales = [
-    "pt_BR.UTF-8",
-    "pt_BR.utf8",
-    "pt_BR",
-    # Windows variant (if someone runs locally on Windows)
-    "Portuguese_Brazil.1252",
-]
-_selected_locale = _try_set_locale(_preferred_locales)
-if _selected_locale is None:
-    # Logging isn't configured yet — use print to avoid raising during import.
-    # It's expected on some hosts (e.g. minimal containers) that pt_BR isn't available.
-    try:
-        print("Warning: could not set pt_BR locale; continuing with default locale.")
-    except Exception:
-        pass
+_try_set_locale()
 
-
-try:
-    if sys.platform == "win32":
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-except Exception:
-    pass
-
-
-# Load logging
-logging.basicConfig(level=getattr(logging, settings.log_level))
-logger = logging.getLogger(__name__)
 
 # Load notion client
 app = FastAPI(
@@ -69,7 +49,11 @@ app = FastAPI(
 
 app.add_api_route("/health", health_check, methods=["GET"])
 app.add_api_route("/notion/webhook", webhook, methods=["POST"])
+
 app.add_api_route("/report/{template}", report_by_template, methods=["GET"])
+app.add_api_route("/reports/{template}", report_by_template, methods=["GET"])
+app.add_api_route("/relatorios/{template}", report_by_template, methods=["GET"])
+app.add_api_route("/relatorio/{template}", report_by_template, methods=["GET"])
 
 
 @app.get("/")

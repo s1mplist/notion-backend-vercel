@@ -1,17 +1,18 @@
-import logging
 import os
 import sys
+from datetime import UTC, datetime
+from typing import Any
+
+from utils.logging import get_logger
 
 
 try:
     import psutil  # type: ignore
 except ImportError:
     psutil = None  # health check seguirá sem métricas de sistema
-from datetime import UTC, datetime
-from typing import Any
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Armazena o timestamp de quando o serviço iniciou
 SERVICE_START_TIME = datetime.now(UTC)

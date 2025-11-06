@@ -1,14 +1,14 @@
-import logging
 from pathlib import Path
 
 from fastapi import HTTPException, Query
 from fastapi.responses import HTMLResponse
 
-from services.report.generator import ReportGenerator
+from services.report.generate_report import ReportGenerator
+from utils.logging import get_logger
 
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
+generator = ReportGenerator()
 
 def _get_injection_html() -> str:
     """
@@ -23,11 +23,7 @@ async def report_by_template(
     template: str,
     page_id: str = Query(..., description="Notion page ID (FACT)"),
 ) -> HTMLResponse:
-    """
-    Renderiza um relatório HTML usando o template escolhido em
-    templates/relatorios/{template}/template.html.
-    """
-    # Validar existência do bundle do template
+    logger.info(f"Gerando relatório para página {page_id} com o template '{template}'")
     bundle_dir = (
         Path(__file__).resolve().parents[2] / "templates" / "relatorios" / template
     )
@@ -39,7 +35,7 @@ async def report_by_template(
         )
 
     try:
-        generator = ReportGenerator()
+        logger.info("Getting fact data and generating report...")
         result = await generator.generate_report_with_template(page_id, template)
 
         html_content = result["html_content"]
