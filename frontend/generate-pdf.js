@@ -245,38 +245,57 @@ module.exports = async (req, res) => {
       // Some browserless endpoints expect POST body with { html, options }
       // Browserless validation does NOT accept custom fields under options like `baseURL`.
       // Inject base URL into the HTML via a <base> tag instead of forwarding it in options.
-      let htmlForRemote = html;
-  if (baseURL && typeof baseURL === 'string') {
+      let htmlBeforeInlining = html;
+      if (baseURL && typeof baseURL === 'string') {
         try {
           const baseTag = `<base href="${baseURL}">`;
-          if (/\<head[\s\S]*?\>/i.test(htmlForRemote)) {
-            // insert right after opening <head>
-            htmlForRemote = htmlForRemote.replace(/(\<head[\s\S]*?\>)/i, `$1${baseTag}`);
-          } else if (/\<html[\s\S]*?\>/i.test(htmlForRemote)) {
-            // insert a head section after opening <html>
-            htmlForRemote = htmlForRemote.replace(/(\<html[\s\S]*?\>)/i, `$1<head>${baseTag}</head>`);
+          if (/\<head[\s\S]*?\>/i.test(htmlBeforeInlining)) {
+            htmlBeforeInlining = htmlBeforeInlining.replace(/(\<head[\s\S]*?\>)/i, `$1${baseTag}`);
+          } else if (/\<html[\s\S]*?\>/i.test(htmlBeforeInlining)) {
+            htmlBeforeInlining = htmlBeforeInlining.replace(/(\<html[\s\S]*?\>)/i, `$1<head>${baseTag}</head>`);
           } else {
-            // fallback: prepend base tag
-            htmlForRemote = `${baseTag}\n${htmlForRemote}`;
+            htmlBeforeInlining = `${baseTag}\n${htmlBeforeInlining}`;
           }
         } catch (e) {
           console.warn('[PDF] Failed to inject base tag into HTML for remote renderer', e);
         }
       }
 
-      // Inline & optimize remote images into the HTML so Browserless fetches don't
-      // need to reach private/presigned URLs or be blocked; this keeps images in PDFs.
+      let htmlForRemote = htmlBeforeInlining;
+
       if (optimizeImages) {
         try {
           htmlForRemote = await inlineOptimizeImagesInHtml(htmlForRemote, baseURL, { maxImageWidth, jpegQuality, maxDownloadBytes });
         } catch (e) {
           console.warn('[PDF] inlineOptimizeImagesInHtml failed, continuing without inlining', e);
+          htmlForRemote = htmlBeforeInlining;
         }
       }
 
       const payload = { html: htmlForRemote, options: { format, landscape, printBackground, preferCSSPageSize, margin } };
 
-      console.log('[PDF] Sending HTML to remote renderer', { endpoint });
+      // Verify payload size and fallback if it exceeds remote limit (default 10MB)
+      const maxRemotePayload = Number(process.env.BROWSERLESS_MAX_PAYLOAD_BYTES || 10 * 1024 * 1024);
+      const payloadSize = Buffer.byteLength(JSON.stringify(payload), 'utf8');
+      if (payloadSize > maxRemotePayload) {
+        console.warn('[PDF] Payload too large for remote renderer:', { payloadSize, maxRemotePayload });
+        if (optimizeImages) {
+          // Retry without inlining images (use original HTML with base tag)
+          const fallbackPayload = { html: htmlBeforeInlining, options: { format, landscape, printBackground, preferCSSPageSize, margin } };
+          const fallbackSize = Buffer.byteLength(JSON.stringify(fallbackPayload), 'utf8');
+          if (fallbackSize <= maxRemotePayload) {
+            console.warn('[PDF] Falling back to non-inlined HTML for remote renderer');
+            // replace payload with fallback
+            Object.assign(payload, fallbackPayload);
+          } else {
+            throw new Error(`Prepared payload (${payloadSize} bytes) and fallback (${fallbackSize} bytes) both exceed remote renderer limit (${maxRemotePayload} bytes).`);
+          }
+        } else {
+          throw new Error(`Prepared payload (${payloadSize} bytes) exceeds remote renderer limit (${maxRemotePayload} bytes).`);
+        }
+      }
+      
+      console.log('[PDF] Sending HTML to remote renderer', { endpoint, payloadSize: Buffer.byteLength(JSON.stringify(payload), 'utf8') });
       const timeoutMs = Number(process.env.BROWSERLESS_TIMEOUT_MS || 30000);
       const remoteResp = await fetchWithTimeout(endpoint, timeoutMs, {
         method: 'POST',
