@@ -25,9 +25,11 @@ package-dir = {"" = "src"}
 dev = [
     "ipykernel>=7.0.1",
     "ipywidgets>=8.1.7",
+    "mypy>=1.18.2",
     "pre-commit>=4.3.0",
     "ruff>=0.14.1",
     "uvicorn>=0.38.0",
+    "vulture>=2.14",
 ]
 tests = [
     "pytest>=8.4.2",
@@ -45,15 +47,15 @@ select = [
     "W",   # pycodestyle warnings
     "F",   # pyflakes
     "I",   # isort
-    "UP",  # pyupgrade
     "COM8",# jinja2 linting
 ]
 ignore = [
-    "E203",  # black compatibility
-    "E501",  # handled by formatter
-    "COM812",# handled by formatter
-    "ISC001", # handled by formatter
-    "UP006"
+    "E203",
+    "E501",
+    "COM812",
+    "ISC001",
+    "UP006",
+    "UP035"
 
 ]
 fixable = ["ALL"]
