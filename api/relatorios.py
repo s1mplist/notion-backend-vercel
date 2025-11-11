@@ -3,12 +3,15 @@ from pathlib import Path
 from fastapi import HTTPException, Query
 from fastapi.responses import HTMLResponse
 
+from api.config import get_settings
 from services.report.generate_report import ReportGenerator
 from utils.logging import get_logger
 
 
 logger = get_logger(__name__)
+settings = get_settings()
 generator = ReportGenerator()
+
 
 def _get_injection_html() -> str:
     """
@@ -16,6 +19,10 @@ def _get_injection_html() -> str:
     """
     with open(Path(__file__).resolve().parent / "script.html") as f:
         injection = f.read()
+
+    # Injeta a variável de ambiente PDF_SERVICE_URL
+    injection = injection.replace("{{ pdf_service_url }}", settings.pdf_service_url)
+
     return injection
 
 
@@ -25,7 +32,7 @@ async def report_by_template(
 ) -> HTMLResponse:
     logger.info(f"Gerando relatório para página {page_id} com o template '{template}'")
     bundle_dir = (
-        Path(__file__).resolve().parents[2] / "templates" / "relatorios" / template
+        Path(__file__).resolve().parents[1] / "templates" / "relatorios" / template
     )
     template_file = bundle_dir / "template.html"
     if not template_file.exists():

@@ -69,6 +69,12 @@ class Settings(BaseSettings):
         description="Public base URL used to build shareable preview links",
     )
 
+    pdf_service_url: str = Field(
+        default="http://localhost:3000/api/pdf",
+        description="URL of the PDF generation service",
+        env="PDF_SERVICE_URL",
+    )
+
     # Backwards-compatible properties usados em testes
     @property
     def notion_api_token(self) -> str:

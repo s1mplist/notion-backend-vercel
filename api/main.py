@@ -3,13 +3,13 @@ from datetime import datetime
 
 from fastapi import FastAPI
 
+# Configuration
+from api.config import get_settings
+
 # FastAPI Routes
 from api.health import health_check
 from api.notion.webhook import webhook
 from api.relatorios import report_by_template
-
-# Configuration
-from config import get_settings
 from utils.logging import get_logger
 
 
