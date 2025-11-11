@@ -6,7 +6,7 @@ import logging
 import os
 from pathlib import Path
 
-from config import get_settings
+from api.config import get_settings
 
 
 settings = get_settings()

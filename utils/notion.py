@@ -1,4 +1,3 @@
-import codecs
 import re
 import unicodedata
 from typing import Any, Dict, List, Optional, Tuple
@@ -60,7 +59,9 @@ class NotionUtils:
     # --------------------
     # Busca por regex no nome normalizado
     # --------------------
-    def find_property_by_regex(self, props: Dict[str, Any], pattern: str) -> Optional[Any]:
+    def find_property_by_regex(
+        self, props: Dict[str, Any], pattern: str
+    ) -> Optional[Any]:
         """
         Pesquisa por propriedade usando regex aplicada ao snake_case normalizado.
         Retorna o valor da propriedade encontrada ou None.
@@ -99,7 +100,7 @@ class NotionUtils:
             pt = seg.get("plain_text") or seg.get("text", {}).get("content") or ""
             if pt:
                 parts.append(pt)
-        #return self.decode_escapes("".join(parts))
+        # return self.decode_escapes("".join(parts))
         return "".join(parts)
 
     def extract_text(self, rich_text_list: List[Dict[str, Any]]) -> str:
@@ -107,9 +108,10 @@ class NotionUtils:
         if not rich_text_list:
             return ""
         raw = " ".join(
-            (t.get("text", {}).get("content", "") if isinstance(t, dict) else "") for t in rich_text_list
+            (t.get("text", {}).get("content", "") if isinstance(t, dict) else "")
+            for t in rich_text_list
         )
-        #return self.decode_escapes(raw)
+        # return self.decode_escapes(raw)
         return raw
 
     def extract_title(self, prop: Dict[str, Any]) -> str:
@@ -156,7 +158,9 @@ class NotionUtils:
                     values.append(item.get("number"))
                 elif itype == "relation":
                     rels = item.get("relation") or []
-                    values.extend([r.get("id", "").replace("-", "") for r in rels if r.get("id")])
+                    values.extend(
+                        [r.get("id", "").replace("-", "") for r in rels if r.get("id")]
+                    )
                 else:
                     # fallback: try coletar any plain_text presentes
                     for v in item.values():
@@ -189,11 +193,19 @@ class NotionUtils:
             sel = prop.get("select")
             return sel.get("name") if sel else None
         if ptype == "multi_select":
-            return [s.get("name") for s in (prop.get("multi_select") or []) if s.get("name") is not None]
+            return [
+                s.get("name")
+                for s in (prop.get("multi_select") or [])
+                if s.get("name") is not None
+            ]
         if ptype == "relation":
             return self.extract_relation_ids(prop)
         if ptype == "people":
-            return [p.get("name") for p in (prop.get("people") or []) if p.get("name") is not None]
+            return [
+                p.get("name")
+                for p in (prop.get("people") or [])
+                if p.get("name") is not None
+            ]
         if ptype == "date":
             return self.extract_date(prop)
         if ptype == "checkbox":
