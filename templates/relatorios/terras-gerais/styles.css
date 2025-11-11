@@ -6,6 +6,7 @@
     --border-color: #e0e0e0;
     --background-light: #f5f5f5;
     --spacing-unit: 1rem;
+    --gallery-image-object-fit: cover;
 }
 
 /* Reset e estilos base */
@@ -29,8 +30,6 @@ body {
     size: 270mm 325mm;
     margin: 1mm;
 }
-
-/* width height */
 
 /* Pré-visualização em tela: centralizar página e evitar ocupar toda a largura */
 @media screen {
@@ -135,9 +134,6 @@ body {
 
 /* Galeria de imagens - OTIMIZADA PARA PDF */
 .images-and-assessment-group {
-    /* Allow the images group to break across pages when necessary so the
-       browser won't move the entire group to the next page if it doesn't
-       fully fit. Individual image wrappers will still avoid being split. */
     page-break-inside: auto !important;
     break-inside: auto !important;
     margin-top: 0.25rem;
@@ -145,7 +141,7 @@ body {
 
 .image-gallery {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 0.25rem;
     margin: 0.25rem 0;
 }
@@ -153,28 +149,22 @@ body {
 .gallery-image-wrapper {
     position: relative;
     overflow: hidden;
-    /* Prevent a single image wrapper from being split across pages, but
-       don't force the whole gallery group to jump to the next page. */
     page-break-inside: avoid !important;
     break-inside: avoid !important;
-}
-
-/* Fixed-size gallery image wrappers (screen) to avoid scaling with page
-   width. The image itself fills the wrapper via width/height 100% and
-   object-fit: cover to keep aspect and crop overflow. */
-.gallery-image-wrapper {
-    /* Fixed width for thumbnails; height is flexible so images keep
-       their original aspect ratio (portrait 3:4 ~ 0.75). */
-    width: 410px;
+    width: 100% !important;
+    height: auto !important;
     display: inline-block;
     vertical-align: top;
+    aspect-ratio: 4/3;
+    /* ou o ratio que você preferir */
 }
 
 .gallery-image {
-    /* Fill wrapper width but keep natural proportions */
-    width: 100%;
-    height: auto;
-    object-fit: contain; /* show entire image without cropping */
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    /* or contain */
+    object-position: center !important;
     border-radius: 6px;
     border: 1px solid var(--border-color);
     display: block;
@@ -343,39 +333,48 @@ body {
 
 /* Print */
 @media print {
-
-    /* Reduce overall quality to save space */
     * {
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
     }
 
+    body {
+        width: auto !important;
+        padding: 4mm !important;
+        margin: 0 auto !important;
+        box-shadow: none !important;
+        overflow: visible !important;
+    }
+
+    .talhao {
+        page-break-before: auto !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        padding: 0.5rem !important;
+        margin-bottom: 0.5rem !important;
+    }
 
     .image-gallery {
         gap: 0.25rem !important;
         margin: 0.25rem 0;
-        /* center items inside the grid cells */
         justify-items: center;
     }
 
-    img,
-    .gallery-image {
-        /* For print use fixed physical dimensions so images don't resize to
-           fit the page. Use mm to keep consistent print sizes. */
-        width: 80mm !important;
-        height: 60mm !important;
-        object-fit: cover !important;
-        border-radius: 6px !important;
-        max-width: none !important;
+    .gallery-image-wrapper {
+        width: 100% !important;
+        height: auto !important;
+        padding: 0 !important;
+        margin: 0 auto !important;
+        display: block !important;
     }
 
-    .gallery-image-wrapper {
-        padding: 0 !important;
-        margin: 0 !important;
-        display: block !important;
-        /* make sure wrappers are centered inside gallery cells */
-        margin-left: auto !important;
-        margin-right: auto !important;
+    .gallery-image {
+        width: 100% !important;
+        height: auto !important;
+        object-fit: contain !important;
+        object-position: center !important;
+        border-radius: 6px !important;
+        max-width: none !important;
     }
 
     .avaliacao {
@@ -387,33 +386,17 @@ body {
     }
 
     .images-and-assessment-group {
-        /* allow group to split if needed; layout will stack by default */
         page-break-inside: auto !important;
         break-inside: auto !important;
         display: block !important;
     }
+}
 
-    /* Page breaks: force each `talhao` to start on a new printed page so the
-       output contains one talhão per page (plus the home/cover page). */
-    .talhao {
-        page-break-before: auto !important;
-        page-break-inside: avoid !important;
-        break-inside: avoid !important;
+/* (Consolidated into the earlier .gallery-image-wrapper rule) */
+:root {
+    --gallery-image-object-fit: cover;
 
-        /* Keep moderate spacing for print */
-        padding: 0.5rem !important;
-        margin-bottom: 0.5rem !important;
-    }
-
-    /* Ensure the page content fits inside the printable area and
-       right margin is not pushed outside the page. Remove any large
-       screen-only widths and shrink padding for print. */
-    body {
-        width: auto !important;
-        padding: 4mm !important;
-        margin: 0 auto !important;
-        box-shadow: none !important;
-        overflow: visible !important;
-    }
-
+    width: 100%;
+    height: 100%;
+    object-fit: var(--gallery-image-object-fit);
 }
