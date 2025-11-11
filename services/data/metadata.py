@@ -2,7 +2,7 @@ from typing import Any
 
 from notion_client import AsyncClient
 
-from config import get_settings
+from api.config import get_settings
 from utils.logging import get_logger
 from utils.notion import extract_text
 

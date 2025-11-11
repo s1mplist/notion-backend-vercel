@@ -6,7 +6,7 @@ from typing import Any, List
 
 from notion_client import AsyncClient, Client
 
-from config import get_settings
+from api.config import get_settings
 from models.report import Image, Plot
 from utils.logging import get_logger
 from utils.notion import NotionUtils
@@ -20,51 +20,33 @@ class NotionService:
     """Service for interacting with Notion API and Data Sources."""
 
     def __init__(self):
-        self.client = Client(auth=settings.notion_token)
-        self.async_client = AsyncClient(auth=settings.notion_token)
+        self.client = None
+        self.async_client = None
         self.notion_utils = NotionUtils()
 
         logger.info("NotionService initialized.")
-
-    async def aclose(self) -> None:
-        """Fechar AsyncClient explicitamente (chamar no shutdown do app)."""
-        try:
-            await self.async_client.aclose()
-            logger.info("AsyncClient closed successfully.")
-        except Exception as e:
-            logger.warning(f"Error closing AsyncClient: {e}")
-
-    def close(self) -> None:
-        """Fechar Client se necessário (sync)."""
-        try:
-            # Client does not always expose close; proteger por segurança
-            if hasattr(self.client, "close"):
-                self.client.close()
-                logger.info("Client closed successfully.")
-        except Exception as e:
-            logger.warning(f"Error closing Client: {e}")
 
     # -----------------------
     # Page retrieval
     # -----------------------
     def get_page(self, page_id: str) -> dict[str, Any]:
         """Retrieve a single page by ID (sync)."""
-        return self.client.pages.retrieve(page_id)
+        with Client(auth=settings.notion_token) as client:
+            return client.pages.retrieve(page_id=page_id)
 
     async def async_get_page(self, page_id: str) -> dict[str, Any]:
         """Async wrapper to retrieve a Notion page using shared async_client."""
-        return await self.async_client.pages.retrieve(page_id=page_id)
+        async with AsyncClient(auth=settings.notion_token) as notion:
+            return await notion.pages.retrieve(page_id=page_id)
 
     def get_pages(self, page_ids: list[str]) -> list[dict[str, Any]]:
         """Retrieve multiple pages by IDs (sync)."""
-        logger.info(f"Retrieving multiple pages: {page_ids}")
         pages = [self.get_page(pid) for pid in page_ids]
         logger.info(f"Retrieved {len(pages)} pages.")
         return pages
 
     async def async_get_pages(self, page_ids: list[str]) -> list[dict[str, Any]]:
         """Retrieve multiple pages by IDs (async)."""
-        logger.info(f"Async retrieving multiple pages: {page_ids}")
         tasks = [self.async_get_page(pid) for pid in page_ids]
         pages = await asyncio.gather(*tasks, return_exceptions=False)
         logger.info(f"Async retrieved {len(pages)} pages.")
@@ -77,24 +59,28 @@ class NotionService:
         self, data_source_id: str, query: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         """Sync wrapper to query a Notion data source using shared client."""
-        if query:
-            return self.client.data_sources.query(data_source_id, **query)
-        return self.client.data_sources.query(data_source_id)
+        # Use a short-lived Client to guarantee closure after the request.
+        with Client(auth=settings.notion_token) as client:
+            if query:
+                return client.data_sources.query(data_source_id, **query)
+            return client.data_sources.query(data_source_id)
 
     async def async_query_data_source(
         self, data_source_id: str, query: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         """Async wrapper to query a Notion data source using shared async_client."""
-        if query:
-            return await self.async_client.data_sources.query(data_source_id, **query)
-        return await self.async_client.data_sources.query(data_source_id)
+        async with AsyncClient(auth=settings.notion_token) as notion:
+            if query:
+                return await notion.data_sources.query(data_source_id, **query)
+            return await notion.data_sources.query(data_source_id)
 
     # -----------------------
     # Data source IDs helpers
     # -----------------------
     def get_data_source_id(self, database_id: str) -> str:
         """Get the first data source ID from a database (sync)."""
-        db = self.client.databases.retrieve(database_id)
+        with Client(auth=settings.notion_token) as client:
+            db = client.databases.retrieve(database_id=database_id)
         ds_list = db.get("data_sources") or []
 
         logger.info(f"Retrieved data sources for database {database_id}: {ds_list}")
@@ -106,10 +92,13 @@ class NotionService:
 
     async def async_get_data_source_id(self, database_id: str) -> str:
         """Get the first data source ID from a database (async)."""
-        db = await self.async_client.databases.retrieve(database_id=database_id)
+        async with AsyncClient(auth=settings.notion_token) as notion:
+            db = await notion.databases.retrieve(database_id=database_id)
         ds_list = db.get("data_sources") or []
 
-        logger.info(f"Async retrieved data sources for database {database_id}: {ds_list}")
+        logger.info(
+            f"Async retrieved data sources for database {database_id}: {ds_list}"
+        )
 
         if not ds_list:
             logger.error(f"Database {database_id} has no data sources (async).")
@@ -125,14 +114,18 @@ class NotionService:
 
     async def async_get_fact_and_talhoes_data_sources(self) -> tuple[str, str]:
         """Asynchronously get data source IDs for FACT and Talhões databases (async)."""
-        fact_ds_id = await self.async_get_data_source_id(settings.notion_fact_database_id)
-        talhoes_ds_id = await self.async_get_data_source_id(settings.notion_talhoes_database_id)
+        fact_ds_id = await self.async_get_data_source_id(
+            settings.notion_fact_database_id
+        )
+        talhoes_ds_id = await self.async_get_data_source_id(
+            settings.notion_talhoes_database_id
+        )
         logger.info("Async retrieved data source IDs for FACT and Talhões databases.")
         return fact_ds_id, talhoes_ds_id
 
     async def get_data_source_ids(self) -> tuple[str, str]:
         """Legacy async helper that retrieves data source IDs using an async context."""
-        async with self.async_client as notion:
+        async with AsyncClient(auth=settings.notion_token) as notion:
             fact_db = await notion.databases.retrieve(
                 database_id=settings.notion_fact_database_id
             )
@@ -154,30 +147,35 @@ class NotionService:
         """Retrieve all child blocks for a given page or block (paginated) (sync)."""
         results: list[dict[str, Any]] = []
         start_cursor: str | None = None
-        while True:
-            resp = self.client.blocks.children.list(
-                block_id=block_id, start_cursor=start_cursor
-            )
-            results.extend(resp.get("results", []))
-            if not resp.get("has_more"):
-                break
-            start_cursor = resp.get("next_cursor")
-            if not start_cursor:
-                break
+        # Keep the client open across the paginated loop and ensure it is closed after.
+        with Client(auth=settings.notion_token) as client:
+            while True:
+                resp = client.blocks.children.list(
+                    block_id=block_id, start_cursor=start_cursor
+                )
+                results.extend(resp.get("results", []))
+                if not resp.get("has_more"):
+                    break
+                start_cursor = resp.get("next_cursor")
+                if not start_cursor:
+                    break
         return results
 
     async def async_get_page_blocks(self, block_id: str) -> list[dict[str, Any]]:
         """Async version of get_page_blocks (paginação) para evitar bloqueio."""
         results: list[dict[str, Any]] = []
         start_cursor: str | None = None
-        while True:
-            resp = await self.async_client.blocks.children.list(block_id=block_id, start_cursor=start_cursor)
-            results.extend(resp.get("results", []))
-            if not resp.get("has_more"):
-                break
-            start_cursor = resp.get("next_cursor")
-            if not start_cursor:
-                break
+        async with AsyncClient(auth=settings.notion_token) as notion:
+            while True:
+                resp = await notion.blocks.children.list(
+                    block_id=block_id, start_cursor=start_cursor
+                )
+                results.extend(resp.get("results", []))
+                if not resp.get("has_more"):
+                    break
+                start_cursor = resp.get("next_cursor")
+                if not start_cursor:
+                    break
         return results
 
     # -----------------------
@@ -205,7 +203,9 @@ class NotionService:
     ) -> list[dict[str, Any]]:
         """Parse data source query results into simplified pages."""
         items: list[dict[str, Any]] = []
-        for res in (ds_result.get("results") if isinstance(ds_result, dict) else ds_result) or []:
+        for res in (
+            ds_result.get("results") if isinstance(ds_result, dict) else ds_result
+        ) or []:
             page = res.get("page") if isinstance(res, dict) and "page" in res else res
             if not isinstance(page, dict):
                 continue
@@ -346,20 +346,32 @@ class NotionService:
         for plot in plots_with_images or []:
             talhao_id = plot.get("id")
             if talhao_id:
-                images_map_by_talhao_id[talhao_id] = plot
+                # Normalize id key to a stripped string to increase chance of matching
+                images_map_by_talhao_id[str(talhao_id).strip()] = plot
 
             plot_names = plot.get("name") or []
             if isinstance(plot_names, (list, tuple)):
                 for name in plot_names:
                     if name:
-                        images_map_by_name[str(name)] = plot
+                        images_map_by_name[str(name).strip()] = plot
             elif plot_names:
-                images_map_by_name[str(plot_names)] = plot
+                images_map_by_name[str(plot_names).strip()] = plot
 
         logger.debug(
             "Images mapped by talhao_id: %s", list(images_map_by_talhao_id.keys())
         )
         logger.debug("Images mapped by name: %s", list(images_map_by_name.keys()))
+
+        try:
+            logger.debug(
+                "Images maps sizes -> by_id=%d by_name=%d; sample_ids=%s; sample_names=%s",
+                len(images_map_by_talhao_id),
+                len(images_map_by_name),
+                list(images_map_by_talhao_id.keys())[:5],
+                list(images_map_by_name.keys())[:5],
+            )
+        except Exception:
+            pass
 
         def _talhao_index(t: dict) -> int:
             tid = str(t.get("id_talhao", ""))
@@ -370,7 +382,13 @@ class NotionService:
 
         for talhao in talhoes_sorted:
             talhao_id = str(talhao.get("id_talhao", "") or "")
-            talhao_name = talhao.get("nome_talhao") or talhao_id or talhao.get("_title") or talhao.get("name") or ""
+            talhao_name = (
+                talhao.get("nome_talhao")
+                or talhao_id
+                or talhao.get("_title")
+                or talhao.get("name")
+                or ""
+            )
             area_val = talhao.get("area", 0.0) or 0.0
             if isinstance(area_val, str):
                 area_val = area_val.strip().replace(",", ".")
@@ -380,35 +398,65 @@ class NotionService:
                 area_float = 0.0
 
             image_data: dict = {}
-            if talhao_id and talhao_id in images_map_by_talhao_id:
-                image_data = images_map_by_talhao_id[talhao_id]
-                logger.debug("Matched talhão '%s' by ID: %s", talhao_name, talhao_id)
-            elif talhao_name and talhao_name in images_map_by_name:
-                image_data = images_map_by_name[talhao_name]
-                logger.debug("Matched talhão '%s' by name", talhao_name)
+            # normalize matching keys
+            norm_id = talhao_id.strip()
+            norm_name = str(talhao_name).strip()
+
+            matched_by_id = norm_id and norm_id in images_map_by_talhao_id
+            matched_by_name = (
+                (not matched_by_id) and norm_name and norm_name in images_map_by_name
+            )
+
+            if matched_by_id:
+                image_data = images_map_by_talhao_id.get(norm_id, {})
+                logger.debug("Matched talhão '%s' by ID: %s", talhao_name, norm_id)
+            elif matched_by_name:
+                image_data = images_map_by_name.get(norm_name, {})
+                logger.debug("Matched talhão '%s' by name: %s", talhao_name, norm_name)
             else:
-                # don't fallback by position to avoid cross-farm mixing
+                logger.debug(
+                    "No match for talhão '%s' (id=%s, name=%s). Will skip unless fallback available.",
+                    talhao_name,
+                    norm_id,
+                    norm_name,
+                )
                 image_data = {}
 
             images_list: List[Image] = []
-            for img in image_data.get("images", []) if isinstance(image_data.get("images", []), (list, tuple)) else []:
+            for img in (
+                image_data.get("images", [])
+                if isinstance(image_data.get("images", []), (list, tuple))
+                else []
+            ):
                 images_list.append(
-                    Image(url=img.get("url", "") or "", description=img.get("name") or None)
+                    Image(
+                        url=img.get("url", "") or "",
+                        description=img.get("name") or None,
+                    )
                 )
 
             assessment_raw = image_data.get("assessment", "")
             if isinstance(assessment_raw, list):
-                assessment_text = (assessment_raw[0] or "").strip() if assessment_raw else ""
+                assessment_text = (
+                    (assessment_raw[0] or "").strip() if assessment_raw else ""
+                )
             else:
                 assessment_text = str(assessment_raw or "").strip()
 
             if not assessment_text:
-                # skip plots without assessment
+                logger.debug(
+                    "Skipping talhão '%s' (id=%s): no assessment text found (raw=%r)",
+                    talhao_name,
+                    norm_id,
+                    assessment_raw,
+                )
                 continue
 
             additional_images_val = image_data.get("additional_images")
             if isinstance(additional_images_val, list):
-                additional_images_val = ", ".join([str(x) for x in additional_images_val if x]) or None
+                additional_images_val = (
+                    ", ".join([str(x) for x in additional_images_val if x]) or None
+                )
             elif additional_images_val is not None:
                 additional_images_val = str(additional_images_val).strip() or None
 

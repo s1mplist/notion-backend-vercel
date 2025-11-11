@@ -1,9 +1,10 @@
 import functools
+from contextlib import asynccontextmanager
 from datetime import date, datetime
 
 from notion_client import AsyncClient
 
-from config import get_settings
+from api.config import get_settings
 from models.generation import GenerationMetadata
 from utils.json import to_json_string
 from utils.logging import get_logger
@@ -140,12 +141,10 @@ class NotionWriter:
 
         Returns the created page id.
         """
-        close_client = False
-        if notion is None:
-            notion = AsyncClient(auth=settings.notion_token)
-            close_client = True
-        try:
-            db = await notion.databases.retrieve(database_id=database_id)
+
+        # Helper inner function that performs the actual work given an AsyncClient instance.
+        async def _do_create(n: AsyncClient) -> str:
+            db = await n.databases.retrieve(database_id=database_id)
             db_props = db.get("properties", {}) or {}
 
             # Fallback: if properties are empty, fetch from data_sources
@@ -154,7 +153,7 @@ class NotionWriter:
                 if data_sources:
                     ds_id = data_sources[0].get("id")
                     if ds_id:
-                        ds = await notion.data_sources.retrieve(ds_id)
+                        ds = await n.data_sources.retrieve(ds_id)
                         db_props = ds.get("properties", {}) or {}
             except (KeyError, AttributeError) as e:
                 logger.warning(f"Error retrieving data source properties: {e}")
@@ -411,7 +410,7 @@ class NotionWriter:
                     if v is None:
                         continue
                     add_prop(k, functools.partial(builder, val=v))
-            page = await notion.pages.create(
+            page = await n.pages.create(
                 parent={"type": "database_id", "database_id": database_id},
                 properties=properties,
                 children=NotionWriter._build_children_blocks(
@@ -419,11 +418,18 @@ class NotionWriter:
                 ),
             )
             return page.get("id")
-        except Exception as e:
-            logger.exception(f"Error creating generation record in Notion: {e}")
-            raise
-        finally:
-            if close_client:
-                await notion.aclose()
-            if close_client:
-                await notion.aclose()
+
+        @asynccontextmanager
+        async def _client_ctx(maybe_client: AsyncClient | None):
+            if maybe_client is not None:
+                yield maybe_client
+            else:
+                async with AsyncClient(auth=settings.notion_token) as client:
+                    yield client
+
+        async with _client_ctx(notion) as client:
+            try:
+                return await _do_create(client)
+            except Exception as e:
+                logger.exception(f"Error creating generation record in Notion: {e}")
+                raise

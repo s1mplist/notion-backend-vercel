@@ -91,8 +91,12 @@ class PlotDataExtractor:
         """Find the photos property key for a given talhao number."""
         # Try to find the fotos property in a case-insensitive way and support variations
 
-        target1_norm = self.notion_utils.normalize_prop_name(f"Upload de fotos - {talhao_number:02d}")
-        target2_norm = self.notion_utils.normalize_prop_name(f"Upload de fotos - {talhao_number}")
+        target1_norm = self.notion_utils.normalize_prop_name(
+            f"Upload de fotos - {talhao_number:02d}"
+        )
+        target2_norm = self.notion_utils.normalize_prop_name(
+            f"Upload de fotos - {talhao_number}"
+        )
 
         for k in properties.keys():
             kn = self.notion_utils.normalize_prop_name(k)

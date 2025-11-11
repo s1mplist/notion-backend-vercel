@@ -6,7 +6,7 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound, select_autoescape
 
-from config import get_settings
+from api.config import get_settings
 from models.report import Report
 from utils.html import inline_assets
 from utils.logging import get_logger
@@ -149,7 +149,27 @@ class HTMLRenderer:
         Returns:
             Complete HTML string ready for PDF conversion
         """
-        return asyncio.run(self.render_report_html(report_data))
+        # If there's no running loop, use asyncio.run (simple path).
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(self.render_report_html(report_data))
+
+        # If an event loop is already running (e.g., inside an async server),
+        # run the async renderer in a separate thread with its own loop to
+        # avoid "Event loop is closed" or "This event loop is already running" errors.
+        import concurrent.futures
+
+        def _run_in_thread(data: Report) -> str:
+            loop = asyncio.new_event_loop()
+            try:
+                return loop.run_until_complete(self.render_report_html(data))
+            finally:
+                loop.close()
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+            fut = ex.submit(_run_in_thread, report_data)
+            return fut.result()
 
     async def render_template_slug(
         self, template_slug: str, report_data: Report

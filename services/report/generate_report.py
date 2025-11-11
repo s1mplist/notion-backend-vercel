@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from config import get_settings
+from api.config import get_settings
 from models.report import Plot, Report
 from services.data.plot_data import PlotDataExtractor
 from services.html.image import optimize_html_images
@@ -31,6 +31,7 @@ MONTHS_PT = {
     "November": "Novembro",
     "December": "Dezembro",
 }
+
 
 class ReportGenerator:
     """Service for generating complete reports with enhanced metadata."""
@@ -65,17 +66,23 @@ class ReportGenerator:
             )
 
             # 1. Data sources
-            fact_ds_id, talhoes_ds_id = self.notion_service.get_fact_and_talhoes_data_sources()
+            fact_ds_id, talhoes_ds_id = (
+                self.notion_service.get_fact_and_talhoes_data_sources()
+            )
 
             # 2. FACT data
-            fact_data = await self.notion_service.async_query_fact_by_page_id(fact_ds_id, page_id)
+            fact_data = await self.notion_service.async_query_fact_by_page_id(
+                fact_ds_id, page_id
+            )
 
             if not fact_data:
                 raise ValueError(f"FACT page {page_id} not found")
             fact_item = fact_data[0]
 
             # 4. Talhões data
-            talhoes_data = self.notion_service.query_talhoes_by_farm_ids(talhoes_ds_id, fact_item.get("farm"))
+            talhoes_data = self.notion_service.query_talhoes_by_farm_ids(
+                talhoes_ds_id, fact_item.get("farm")
+            )
 
             # 5. Farm name
             farm_name = fact_item.get("nome_fazenda")
@@ -85,7 +92,9 @@ class ReportGenerator:
             plots_with_images = await self.plot_extractor.extract_plots_data(page_id)
 
             # 7. Merge
-            enriched_plots = self.notion_service.merge_plot_data(talhoes_data, plots_with_images)
+            enriched_plots = self.notion_service.merge_plot_data(
+                talhoes_data, plots_with_images
+            )
 
             # 8. Report model
             report_data = self._build_report_model(
