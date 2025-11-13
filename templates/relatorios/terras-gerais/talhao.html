@@ -23,7 +23,7 @@
         <div class="image-gallery">
             {% for image in plot.images %}
             <div class="gallery-image-wrapper">
-                <img src="{{image.url}}" alt="{{image.description}}" class="gallery-image" loading="lazy"
+                <img src="{{image.url}}" alt="{{image.description}}" class="gallery-image" loading="eager"
                     decoding="async" style="max-width:100%;height:auto;display:block;"
                     onerror="this.style.display='none'">
             </div>
