@@ -1,0 +1,94 @@
+<style>
+  #report-download-bar {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 99999;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    background: #ffffffcc;
+    backdrop-filter: saturate(180%) blur(6px);
+    padding: 10px 12px;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+    font-family: system-ui, Arial, sans-serif;
+  }
+
+  #download-pdf-btn {
+    background: #2563eb;
+    color: #fff;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+
+  #download-pdf-btn[disabled] {
+    opacity: .6;
+    cursor: wait;
+  }
+
+  @media print {
+    #report-download-bar {
+      display: none !important;
+    }
+  }
+</style>
+<div id="report-download-bar">
+  <button id="download-pdf-btn">Baixar PDF</button>
+</div>
+<script>
+  (function () {
+    const btn = document.getElementById('download-pdf-btn');
+    const PDF_SERVICE_URL = '{{ pdf_service_url }}';
+
+    async function downloadPDF() {
+      try {
+        btn.disabled = true;
+        btn.textContent = 'Gerando PDF...';
+        
+        // Envia a URL atual da página para o serviço gerar o PDF
+        const response = await fetch(PDF_SERVICE_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            url: window.location.href
+          })
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Erro ao gerar PDF: ${response.status} - ${errorText}`);
+        }
+
+        // Baixar o PDF
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `relatorio-${new Date().toISOString().split('T')[0]}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+
+        btn.textContent = 'PDF Baixado!';
+        setTimeout(() => {
+          btn.textContent = 'Baixar PDF';
+        }, 2000);
+      } catch (error) {
+        console.error('Erro ao gerar PDF:', error);
+        alert(error.message || 'Erro ao gerar PDF. Verifique o console para mais detalhes.');
+        btn.textContent = 'Erro - Tentar novamente';
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    btn.addEventListener('click', downloadPDF);
+  })();
+</script>
