@@ -331,14 +331,26 @@ class NotionService:
         """
         Merge talhões metadata with plot images.
 
-        Args:
-            talhoes_data: List of talhão metadata (name, area, etc.) - includes page_id/id_talhao from Notion
-            plots_with_images: List of plots with images extracted from page properties - includes id (talhao id) and/or name
-
-        Returns:
-            List of Plot objects with complete data (only plots that have an assessment text).
+        Returns only plots that are present in plots_with_images.
         """
         merged_plots: list[Plot] = []
+        plot_ids_with_images = set()
+        plot_names_with_images = set()
+
+        for plot in plots_with_images or []:
+            if plot.get("id"):
+                plot_ids_with_images.add(str(plot["id"]).strip())
+
+            names = plot.get("name", [])
+            if isinstance(names, list):
+                for name in names:
+                    if name:
+                        plot_names_with_images.add(str(name).strip())
+            elif names:
+                plot_names_with_images.add(str(names).strip())
+
+        logger.debug("Plot IDs with images: %s", plot_ids_with_images)
+        logger.debug("Plot names with images: %s", plot_names_with_images)
 
         images_map_by_talhao_id: dict[str, dict] = {}
         images_map_by_name: dict[str, dict] = {}
@@ -346,7 +358,6 @@ class NotionService:
         for plot in plots_with_images or []:
             talhao_id = plot.get("id")
             if talhao_id:
-                # Normalize id key to a stripped string to increase chance of matching
                 images_map_by_talhao_id[str(talhao_id).strip()] = plot
 
             plot_names = plot.get("name") or []
@@ -389,6 +400,23 @@ class NotionService:
                 or talhao.get("name")
                 or ""
             )
+
+            talhao_appears_in_plots = False
+
+            if talhao_id.strip() in plot_ids_with_images:
+                talhao_appears_in_plots = True
+
+            if str(talhao_name).strip() in plot_names_with_images:
+                talhao_appears_in_plots = True
+
+            if not talhao_appears_in_plots:
+                logger.debug(
+                    "Skipping talhão '%s' (id=%s): not present in plots_with_images",
+                    talhao_name,
+                    talhao_id,
+                )
+                continue
+
             area_val = talhao.get("area", 0.0) or 0.0
             if isinstance(area_val, str):
                 area_val = area_val.strip().replace(",", ".")
@@ -443,15 +471,6 @@ class NotionService:
             else:
                 assessment_text = str(assessment_raw or "").strip()
 
-            if not assessment_text:
-                logger.debug(
-                    "Skipping talhão '%s' (id=%s): no assessment text found (raw=%r)",
-                    talhao_name,
-                    norm_id,
-                    assessment_raw,
-                )
-                continue
-
             additional_images_val = image_data.get("additional_images")
             if isinstance(additional_images_val, list):
                 additional_images_val = (
@@ -467,16 +486,70 @@ class NotionService:
             elif gs:
                 growth_stage = str(gs)
 
-            plot = Plot(
-                id=talhao_name,
-                area=area_float,
-                growth_stage=growth_stage,
-                crop=talhao.get("cultura", "") or "",
-                variety=talhao.get("variedade", "") or "",
-                images=images_list,
-                additional_images=additional_images_val,
-                assessment=assessment_text,
-            )
-            merged_plots.append(plot)
+            plot_names_from_image = image_data.get("name")
+            if (
+                isinstance(plot_names_from_image, list)
+                and len(plot_names_from_image) > 1
+            ):
+                all_talhao_names = {
+                    str(t.get("nome_talhao") or "").strip()
+                    for t in talhoes_data
+                    if t.get("nome_talhao")
+                }
+
+                valid_names = []
+                for individual_name in plot_names_from_image:
+                    name_str = str(individual_name).strip()
+
+                    if name_str in all_talhao_names and name_str != talhao_name:
+                        logger.debug(
+                            "Skipping duplicate name '%s' for talhão '%s' (belongs to another talhão)",
+                            name_str,
+                            talhao_name,
+                        )
+                        continue
+                    valid_names.append(name_str)
+
+                if not valid_names:
+                    valid_names = [talhao_name]
+
+                logger.debug(
+                    "Expanding talhão '%s' into %d plots (valid names: %s)",
+                    talhao_name,
+                    len(valid_names),
+                    valid_names,
+                )
+
+                for individual_name in valid_names:
+                    plot = Plot(
+                        id=talhao_id,
+                        name=individual_name,
+                        area=area_float,
+                        growth_stage=growth_stage,
+                        crop=talhao.get("cultura", "") or "",
+                        variety=talhao.get("variedade", "") or "",
+                        images=images_list,
+                        additional_images=additional_images_val,
+                        assessment=assessment_text or "",
+                    )
+                    merged_plots.append(plot)
+            else:
+                single_name = (
+                    plot_names_from_image[0]
+                    if isinstance(plot_names_from_image, list) and plot_names_from_image
+                    else talhao_name
+                )
+                plot = Plot(
+                    id=talhao_id,
+                    name=single_name,
+                    area=area_float,
+                    growth_stage=growth_stage,
+                    crop=talhao.get("cultura", "") or "",
+                    variety=talhao.get("variedade", "") or "",
+                    images=images_list,
+                    additional_images=additional_images_val,
+                    assessment=assessment_text or "",
+                )
+                merged_plots.append(plot)
 
         return merged_plots

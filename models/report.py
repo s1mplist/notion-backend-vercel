@@ -10,6 +10,7 @@ class Image(BaseModel):
 
 class Plot(BaseModel):
     id: str
+    name: str
     area: float
     growth_stage: str
     crop: str
