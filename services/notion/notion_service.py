@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from typing import Any, List
+from typing import Any, Dict, List
 
 from notion_client import AsyncClient, Client
 
@@ -553,3 +553,45 @@ class NotionService:
                 merged_plots.append(plot)
 
         return merged_plots
+
+    def debug_page_properties(self, page_id: str) -> Dict[str, Any]:
+        """
+        Debug helper para inspecionar propriedades de uma página.
+        Retorna informações sobre propriedades relacionadas a talhões.
+        """
+        page = self.get_page(page_id)
+        properties = page.get("properties", {})
+
+        # Encontrar todas as propriedades de talhão
+        talhao_props = self.notion_utils.find_all_talhao_properties(
+            properties, "talhao visitado"
+        )
+
+        estagio_props = self.notion_utils.find_all_talhao_properties(
+            properties, "estadio fenologico"
+        )
+
+        avaliacao_props = self.notion_utils.find_all_talhao_properties(
+            properties, "avaliacao"
+        )
+
+        result = {
+            "total_properties": len(properties),
+            "all_property_keys": sorted(properties.keys()),
+            "talhao_properties": talhao_props,
+            "estagio_properties": estagio_props,
+            "avaliacao_properties": avaliacao_props,
+            "sample_data": {},
+        }
+
+        # Adicionar dados de exemplo do primeiro talhão encontrado
+        if talhao_props:
+            first_index = min(talhao_props.keys())
+            first_key = talhao_props[first_index]
+            result["sample_data"] = {
+                "index": first_index,
+                "key": first_key,
+                "data": properties[first_key],
+            }
+
+        return result
