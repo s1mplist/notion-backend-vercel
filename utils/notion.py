@@ -29,6 +29,128 @@ class NotionUtils:
         s = re.sub(r"\s+", " ", s).strip()
         return s
 
+    def normalize_property_name_flexible(self, name: str) -> str:
+        """
+        Normalização mais agressiva para matching flexível.
+        Remove acentos, pontuação, converte para lowercase e remove espaços extras.
+        """
+        if not name:
+            return ""
+        # Remover acentos
+        nfkd = unicodedata.normalize("NFKD", name)
+        no_accents = "".join(ch for ch in nfkd if not unicodedata.combining(ch))
+
+        # Lowercase e remover pontuação
+        normalized = no_accents.lower().strip()
+
+        # Manter apenas alfanuméricos e espaços
+        normalized = re.sub(r"[^a-z0-9\s]+", "", normalized)
+
+        # Normalizar espaços múltiplos para um único espaço
+        normalized = re.sub(r"\s+", " ", normalized).strip()
+
+        return normalized
+
+    def find_property_key_flexible(
+        self, properties: Dict[str, Any], *search_patterns: str
+    ) -> Optional[str]:
+        """
+        Busca uma propriedade usando múltiplos padrões com normalização flexível.
+        Retorna a chave original da propriedade encontrada ou None.
+
+        Args:
+            properties: Dicionário de propriedades do Notion
+            *search_patterns: Padrões de busca (ex: "Talhão Visitado - 01", "Talhao visitado - 1")
+
+        Returns:
+            Chave original da propriedade ou None
+        """
+        if not properties or not search_patterns:
+            return None
+
+        # Normalizar todos os padrões de busca
+        normalized_patterns = [
+            self.normalize_property_name_flexible(pattern)
+            for pattern in search_patterns
+        ]
+
+        # Criar mapeamento de nomes normalizados para chaves originais
+        normalized_map = {
+            self.normalize_property_name_flexible(key): key for key in properties.keys()
+        }
+
+        # Buscar correspondência
+        for pattern in normalized_patterns:
+            if pattern in normalized_map:
+                found_key = normalized_map[pattern]
+                logger.debug(
+                    f"Property match: '{found_key}' matched pattern '{pattern}'"
+                )
+                return found_key
+
+        # Fallback: busca por regex se nenhuma correspondência exata
+        for pattern in search_patterns:
+            try:
+                # Criar regex flexível do padrão
+                regex_pattern = re.escape(pattern).replace(r"\ ", r"\s*")
+                regex = re.compile(regex_pattern, re.IGNORECASE)
+
+                for key in properties.keys():
+                    if regex.search(key):
+                        logger.debug(
+                            f"Property regex match: '{key}' matched pattern '{pattern}'"
+                        )
+                        return key
+            except re.error:
+                continue
+
+        logger.debug(f"No property match found for patterns: {search_patterns}")
+        return None
+
+    def extract_talhao_index_from_property(self, property_name: str) -> Optional[int]:
+        """
+        Extrai o índice numérico de uma propriedade de talhão.
+        Ex: "Talhão Visitado - 01" -> 1
+            "Talhao visitado - 3" -> 3
+        """
+        normalized = self.normalize_property_name_flexible(property_name)
+        # Buscar padrão: palavra + numero
+        match = re.search(r"(\d+)", normalized)
+        if match:
+            return int(match.group(1))
+        return None
+
+    def find_all_talhao_properties(
+        self,
+        properties: Dict[str, Any],
+        base_pattern: str = "talhao visitado",
+    ) -> Dict[int, str]:
+        """
+        Encontra todas as propriedades de talhão e retorna um mapa índice -> chave original.
+
+        Args:
+            properties: Dicionário de propriedades
+            base_pattern: Padrão base para buscar (normalizado automaticamente)
+
+        Returns:
+            Dict[int, str]: Mapeamento de índice para chave original
+                Ex: {1: "Talhão Visitado - 01", 2: "Talhão visitado - 02"}
+        """
+        talhao_map: Dict[int, str] = {}
+        normalized_pattern = self.normalize_property_name_flexible(base_pattern)
+
+        for key in properties.keys():
+            normalized_key = self.normalize_property_name_flexible(key)
+
+            # Verificar se a chave começa com o padrão base
+            if normalized_key.startswith(normalized_pattern):
+                index = self.extract_talhao_index_from_property(key)
+                if index is not None:
+                    talhao_map[index] = key
+                    logger.debug(f"Found talhão property: index={index}, key='{key}'")
+
+        return talhao_map
+
     def to_snake(self, name: str) -> str:
         """Converte um nome normalizado para snake_case (determinístico)."""
         n = self.normalize_prop_name(name)

@@ -1,3 +1,5 @@
+from typing import Any, Dict, List
+
 from services.notion.notion_service import NotionService
 from utils.logging import get_logger
 from utils.notion import NotionUtils
@@ -7,283 +9,298 @@ logger = get_logger(__name__)
 
 
 class PlotDataExtractor:
-    """Service for extracting plot data from Notion pages."""
+    """Extrai dados de talhões (plots) das propriedades e blocos de uma página do Notion."""
 
     def __init__(self):
         self.notion_service = NotionService()
         self.notion_utils = NotionUtils()
+        logger.info("PlotDataExtractor initialized")
 
-    async def extract_plots_data(self, report_id: str) -> list[dict]:
+    async def extract_plots_data(self, page_id: str) -> list[dict]:
         """
-        Extract plots data from Notion page properties.
-
-        Args:
-            report_id: ID of the main report page
-
-        Returns:
-            List of plot data dictionaries
+        Extrai dados de talhões de uma página, incluindo imagens das propriedades e blocos.
+        Usa busca flexível para lidar com variações nos nomes das propriedades.
         """
-        try:
-            logger.info(f"Retrieving plots for report ID: {report_id}")
+        logger.info(f"Extracting plots data from page {page_id}")
 
-            # Get page properties
-            page = self.notion_service.get_page(report_id)
-            properties = page["properties"]
+        # Get page properties and blocks
+        page = await self.notion_service.async_get_page(page_id)
+        blocks = await self.notion_service.async_get_page_blocks(page_id)
 
-            # Extract plot information from properties
-            plots = self._extract_plots_from_properties(properties)
+        properties = page.get("properties", {})
 
-            logger.info(f"Plots data retrieved successfully for report ID: {report_id}")
-            logger.debug(f"Plots data: {plots}")
+        # Extract plot data from properties (flexible matching)
+        plots = self._extract_plots_from_properties_flexible(properties)
+        logger.info(f"Extracted {len(plots)} plots from properties")
 
-            # If images are missing, try to find them in page blocks
-            missing_images = any(len(p.get("images", [])) == 0 for p in plots)
-            if missing_images:
-                plots = await self._enhance_plots_with_block_images(report_id, plots)
+        # Extract images from property files first (preferred source)
+        plots = self._extract_images_from_properties(plots, properties)
 
-            return plots
+        # Then try to extract images from blocks (fallback)
+        plots_with_images = self._associate_images_with_plots(plots, blocks)
+        logger.info(
+            f"Associated images with plots: {len(plots_with_images)} plots total"
+        )
 
-        except Exception as e:
-            logger.error(f"Error getting plots data for report {report_id}: {str(e)}")
-            raise
+        return plots_with_images
 
-    def _extract_plots_from_properties(self, properties: dict) -> list[dict]:
-        """Extract plot data from page properties."""
+    def _extract_images_from_properties(
+        self, plots: list[dict], properties: dict
+    ) -> list[dict]:
+        """
+        Extrai imagens das propriedades 'Upload de Fotos - XX'.
+        Estas propriedades contêm arquivos diretamente associados a cada talhão.
+        Retorna imagens no formato: {"url": str, "name": str}
+        """
+        for plot in plots:
+            plot_index = plot["index"]
+
+            # Buscar propriedade de upload de fotos para este talhão
+            upload_key = self._find_related_property(
+                properties,
+                plot_index,
+                "upload de fotos",
+                ["Upload de Fotos", "Upload Fotos", "Fotos"],
+            )
+
+            if upload_key:
+                files_data = properties[upload_key].get("files", [])
+
+                # Extrair URLs dos arquivos no formato esperado
+                for file_item in files_data:
+                    if file_item.get("type") == "file":
+                        file_url = file_item.get("file", {}).get("url")
+                        if file_url:
+                            # Formato compatível com merge_plot_data
+                            plot["images"].append(
+                                {"url": file_url, "name": file_item.get("name", "")}
+                            )
+                            logger.debug(
+                                f"Plot {plot_index:02d}: added image from property '{upload_key}'"
+                            )
+
+                logger.debug(
+                    f"Plot {plot_index:02d}: found {len(files_data)} images in properties"
+                )
+
+        return plots
+
+    def _extract_plots_from_properties_flexible(self, properties: dict) -> list[dict]:
+        """
+        Extrai dados de talhões usando busca flexível de propriedades.
+        Lida com variações como espaços extras, sufixos (1), _ok, etc.
+        """
         plots = []
 
-        # Extract plot information from each talhao property
-        for i in range(1, 19):  # Loop through all possible talhao entries (1-18)
-            talhao_key = f"Talhão Visitado - {i:02d}"
-            estagio_key = f"Estádio Fenológico - {i:02d}"
-            avaliacao_key = f"Avaliação - {i:02d}"
+        # Encontrar todas as propriedades de talhão
+        talhao_map = self.notion_utils.find_all_talhao_properties(
+            properties, "talhao visitado"
+        )
 
-            if talhao_key in properties:
-                talhao_data = properties[talhao_key].get("multi_select", [])
-                if talhao_data:  # If there's data for this talhao
-                    # Find the photos property
-                    found_key = self._find_photos_property_key(properties, i)
-                    fotos_prop = properties.get(found_key) if found_key else {}
+        logger.debug(
+            f"Found {len(talhao_map)} talhão properties: {list(talhao_map.keys())}"
+        )
 
-                    logger.debug(
-                        f"Fotos property for {talhao_key} (found key: {found_key}) -> {fotos_prop}"
-                    )
+        # Processar cada talhão encontrado
+        for index in sorted(talhao_map.keys()):
+            talhao_key = talhao_map[index]
 
-                    # Extract images
-                    images = self._extract_images_from_property(fotos_prop)
+            # Buscar propriedades relacionadas com variações
+            estagio_key = self._find_related_property(
+                properties,
+                index,
+                "estadio fenologico",
+                ["Estádio Fenológico", "Estadio Fenologico", "Estagio Fenologico"],
+            )
 
-                    # Build plot data
-                    plot_data = {
-                        "id": f"talhao_{i}",
-                        "name": [t.get("name", "") for t in talhao_data],
-                        "growth_stage": self._extract_rich_text_content(
-                            properties.get(estagio_key, {})
-                        ),
-                        "assessment": self._extract_rich_text_content(
-                            properties.get(avaliacao_key, {})
-                        ),
-                        "images": images,
-                    }
-                    plots.append(plot_data)
+            avaliacao_key = self._find_related_property(
+                properties, index, "avaliacao", ["Avaliação", "Avaliacao"]
+            )
+
+            # Extrair dados do talhão
+            talhao_data = properties[talhao_key].get("multi_select", [])
+
+            if not talhao_data:
+                logger.debug(f"Talhão {index:02d}: no data in multi_select")
+                continue
+
+            # Extrair estádio fenológico
+            growth_stage = []
+            if estagio_key:
+                estagio_data = properties[estagio_key].get("multi_select", [])
+                if not estagio_data:
+                    # Tentar rich_text como fallback
+                    estagio_rich = properties[estagio_key].get("rich_text", [])
+                    growth_stage = [
+                        item.get("plain_text", "")
+                        for item in estagio_rich
+                        if item.get("plain_text")
+                    ]
+                else:
+                    growth_stage = [
+                        item["name"] for item in estagio_data if item.get("name")
+                    ]
+            else:
+                logger.debug(f"Talhão {index:02d}: Estádio property not found")
+
+            # Extrair avaliação
+            assessment = []
+            if avaliacao_key:
+                avaliacao_data = properties[avaliacao_key].get("rich_text", [])
+                assessment = [item.get("plain_text", "") for item in avaliacao_data]
+            else:
+                logger.debug(f"Talhão {index:02d}: Avaliação property not found")
+
+            # Extrair nomes dos talhões
+            talhao_names = [item["name"] for item in talhao_data if item.get("name")]
+
+            logger.debug(
+                f"Talhão {index:02d}: found {len(talhao_names)} names, "
+                f"growth_stage={growth_stage}, assessment={'Yes' if assessment else 'No'}"
+            )
+
+            plot_data = {
+                "index": index,
+                "name": talhao_names,
+                "growth_stage": growth_stage,
+                "assessment": assessment,
+                "images": [],  # To be filled by property/block extraction
+            }
+
+            plots.append(plot_data)
 
         return plots
 
-    def _find_photos_property_key(self, properties: dict, talhao_number: int) -> str:
-        """Find the photos property key for a given talhao number."""
-        # Try to find the fotos property in a case-insensitive way and support variations
-
-        target1_norm = self.notion_utils.normalize_prop_name(
-            f"Upload de fotos - {talhao_number:02d}"
-        )
-        target2_norm = self.notion_utils.normalize_prop_name(
-            f"Upload de fotos - {talhao_number}"
-        )
-
-        for k in properties.keys():
-            kn = self.notion_utils.normalize_prop_name(k)
-            if kn == target1_norm or kn == target2_norm:
-                return k
-
-        # Also support keys that start with the prefix (handles small variations)
-        for k in properties.keys():
-            kn = self.notion_utils.normalize_prop_name(k)
-            if kn.startswith(target1_norm) or kn.startswith(target2_norm):
-                return k
-
-        return None
-
-    def _extract_images_from_property(self, fotos_prop: dict) -> list[dict]:
+    def _find_related_property(
+        self,
+        properties: Dict[str, Any],
+        index: int,
+        base_pattern: str,
+        name_variants: List[str],
+    ) -> str | None:
         """
-        Extract image URLs and names from a files property.
+        Busca uma propriedade relacionada a um talhão específico.
 
-        NOTE: Notion image URLs contain temporary authentication tokens that expire after 1 hour.
-        For PDF generation, these images should be:
-        1. Downloaded and cached locally, OR
-        2. Uploaded to Vercel Blob storage for permanent URLs, OR
-        3. Embedded as base64 data URLs in the HTML
+        Args:
+            properties: Dicionário de propriedades
+            index: Índice do talhão (1-18)
+            base_pattern: Padrão base normalizado (ex: "estadio fenologico")
+            name_variants: Variações do nome (ex: ["Estádio Fenológico", "Estadio Fenologico"])
 
-        Current implementation returns temporary URLs which may expire before PDF rendering.
+        Returns:
+            Chave da propriedade encontrada ou None
         """
+        # Gerar todas as variações possíveis de busca
+        search_patterns = []
+
+        for variant in name_variants:
+            # Com zero à esquerda
+            search_patterns.append(f"{variant} - {index:02d}")
+            # Sem zero à esquerda
+            search_patterns.append(f"{variant} - {index}")
+            # Com possíveis sufixos comuns
+            search_patterns.append(f"{variant} - {index:02d} (1)")
+            search_patterns.append(f"{variant} - {index:02d}_ok")
+            search_patterns.append(f"{variant} - {index} (1)")
+
+        # Buscar usando o método flexível
+        found_key = self.notion_utils.find_property_key_flexible(
+            properties, *search_patterns
+        )
+
+        if found_key:
+            logger.debug(f"Found related property for index {index}: {found_key}")
+
+        return found_key
+
+    def _associate_images_with_plots(
+        self, plots: list[dict], blocks: list[dict]
+    ) -> list[dict]:
+        """
+        Associa imagens dos blocos aos talhões (usado como fallback se não houver imagens nas properties).
+        """
+        # Collect all images from blocks
+        all_images = self._extract_images_from_blocks(blocks)
+        logger.debug(f"Found {len(all_images)} images in blocks")
+
+        # Associate images with plots based on heading context (only if no images yet)
+        for plot in plots:
+            if not plot[
+                "images"
+            ]:  # Só busca em blocos se não tiver imagens de properties
+                plot_index = plot["index"]
+                block_images = self._find_images_for_plot(
+                    plot_index, all_images, blocks
+                )
+                plot["images"].extend(block_images)
+                logger.debug(
+                    f"Plot {plot_index:02d}: added {len(block_images)} images from blocks"
+                )
+
+        return plots
+
+    def _extract_images_from_blocks(self, blocks: list[dict]) -> list[dict]:
+        """Extrai todas as imagens dos blocos."""
         images = []
-        files_list = []
+        for block in blocks:
+            block_type = block.get("type")
+            if block_type == "image":
+                image_data = block.get("image", {})
+                image_url = None
 
-        if isinstance(fotos_prop, dict):
-            files_list = fotos_prop.get("files") or []
+                if image_data.get("type") == "file":
+                    image_url = image_data.get("file", {}).get("url")
+                elif image_data.get("type") == "external":
+                    image_url = image_data.get("external", {}).get("url")
 
-        for file in files_list:
-            url = None
-            # Support both uploaded files and external links
-            if file.get("type") == "file":
-                url = file.get("file", {}).get("url")
-            elif file.get("type") == "external":
-                url = file.get("external", {}).get("url")
-            # Some SDK payloads may include the url at top-level keys
-            if not url:
-                url = file.get("url") or file.get("file_url")
+                if image_url:
+                    caption = ""
+                    caption_data = image_data.get("caption", [])
+                    if caption_data:
+                        caption = self.notion_utils.extract_text(caption_data)
 
-            if url:
-                # TODO: Consider downloading and caching images or converting to base64
-                # for persistent PDF generation
-                images.append({"url": url, "name": file.get("name", "")})
-
+                    images.append(
+                        {
+                            "block_id": block.get("id"),
+                            "url": image_url,
+                            "caption": caption,
+                        }
+                    )
         return images
 
-    def _extract_rich_text_content(self, property_data: dict) -> list[str]:
-        """Extract content from rich_text property."""
-        return [
-            text.get("text", {}).get("content", "")
-            for text in property_data.get("rich_text", [])
-        ]
+    def _find_images_for_plot(
+        self, plot_index: int, all_images: list[dict], blocks: list[dict]
+    ) -> list[str]:
+        """
+        Encontra imagens associadas a um talhão específico baseado em headings.
+        """
+        plot_images = []
+        current_plot_index = None
 
-    async def _enhance_plots_with_block_images(
-        self, report_id: str, plots: list[dict]
-    ) -> list[dict]:
-        """Try to find images in page blocks as fallback."""
-        logger.info(
-            "Some plots have no images in properties — scanning page blocks for image blocks as fallback"
-        )
+        for block in blocks:
+            block_type = block.get("type")
 
-        try:
-            blocks = self.notion_service.get_page_blocks(report_id)
+            # Check if it's a heading that defines a talhão section
+            if block_type in ["heading_1", "heading_2", "heading_3"]:
+                heading_text = self.notion_utils.extract_text(
+                    block.get(block_type, {}).get("rich_text", [])
+                )
 
-            # Helper to get plain text from rich_text lists
-            def rt_text(items):
-                if not items:
-                    return ""
-                return " ".join(it.get("text", {}).get("content", "") for it in items)
-
-            # Map of plot name tokens to index for simple matching
-            name_index_map = self._build_plot_name_index(plots)
-
-            unmatched = []
-            # Iterate blocks, try to match image blocks to plots
-            for i, block in enumerate(blocks):
-                if block.get("type") != "image":
-                    continue
-
-                image_info = self._extract_image_from_block(block, blocks, i, rt_text)
-                if not image_info:
-                    continue
-
-                # Try to match to a plot
-                matched = self._match_image_to_plot(image_info, name_index_map, plots)
-
-                if not matched:
-                    unmatched.append(image_info)
-
-            # Assign unmatched images to plots that still have no images
-            self._assign_unmatched_images(plots, unmatched)
-
-            logger.debug(f"After block scan, plots data: {plots}")
-
-        except Exception as e:
-            logger.exception(f"Error scanning blocks for images: {e}")
-
-        return plots
-
-    def _build_plot_name_index(self, plots: list[dict]) -> dict[int, list[str]]:
-        """Build an index of plot names for matching."""
-        name_index_map = {}
-        for idx, p in enumerate(plots):
-            # Use all name tokens lowercased
-            tokens = [t.lower() for t in (p.get("name") or []) if isinstance(t, str)]
-            # Also include id like 'talhao_1' and 'pivô 1' token variants
-            tokens.extend([p.get("id", "").lower()])
-            name_index_map[idx] = tokens
-        return name_index_map
-
-    def _extract_image_from_block(
-        self, block: dict, blocks: list[dict], block_index: int, rt_text
-    ) -> dict:
-        """Extract image information from a block."""
-        image_obj = block.get("image", {})
-
-        # Extract URL
-        url = None
-        if image_obj.get("type") == "file":
-            url = image_obj.get("file", {}).get("url")
-        elif image_obj.get("type") == "external":
-            url = image_obj.get("external", {}).get("url")
-        if not url:
-            url = image_obj.get("url") or image_obj.get("file_url")
-
-        if not url:
-            return None
-
-        # Keep original URL without optimization
-
-        # Extract caption
-        caption = ""
-        try:
-            caption = rt_text(image_obj.get("caption", []))
-        except Exception:
-            caption = ""
-
-        # Get nearby text context (up to 3 previous blocks)
-        nearby_text = caption.lower() if isinstance(caption, str) else ""
-        for j in range(max(0, block_index - 3), block_index):
-            blk = blocks[j]
-            t = ""
-            if blk.get("type") in ("paragraph", "heading_1", "heading_2", "heading_3"):
-                # Paragraphs and headings have text in 'rich_text' or 'text'
-                rich = []
-                # Different shapes possible
-                if blk.get(blk.get("type")):
-                    rich = blk.get(blk.get("type")).get("rich_text", [])
-                if not rich and blk.get("paragraph"):
-                    rich = blk.get("paragraph").get("rich_text", [])
-                t = rt_text(rich).lower()
-            nearby_text += " " + t
-
-        return {"url": url, "caption": caption, "nearby_text": nearby_text}
-
-    def _match_image_to_plot(
-        self, image_info: dict, name_index_map: dict, plots: list[dict]
-    ) -> bool:
-        """Try to match an image to a plot based on text context."""
-        caption_l = image_info["caption"].lower()
-        nearby_text = image_info["nearby_text"]
-
-        # Try to match any plot by token presence
-        for idx, tokens in name_index_map.items():
-            for tok in tokens:
-                if not tok:
-                    continue
-                if tok in nearby_text or tok in caption_l:
-                    plots[idx].setdefault("images", []).append(
-                        {"url": image_info["url"], "name": ""}
+                # Extract plot index from heading (flexible)
+                match = self.notion_utils.extract_talhao_index_from_property(
+                    heading_text
+                )
+                if match:
+                    current_plot_index = match
+                    logger.debug(
+                        f"Found heading for plot {current_plot_index}: '{heading_text}'"
                     )
-                    return True
-        return False
 
-    def _assign_unmatched_images(self, plots: list[dict], unmatched: list[dict]):
-        """Assign unmatched images to plots that still have no images (left-to-right)."""
-        uidx = 0
-        for p in plots:
-            if len(p.get("images", [])) == 0 and uidx < len(unmatched):
-                p["images"] = [
-                    {
-                        "url": unmatched[uidx]["url"],
-                        "name": unmatched[uidx].get("caption", ""),
-                    }
-                ]
-                uidx += 1
+            # If we're in the right plot section and find an image, add it
+            elif block_type == "image" and current_plot_index == plot_index:
+                for img in all_images:
+                    if img["block_id"] == block.get("id"):
+                        plot_images.append(img["url"])
+                        break
+
+        return plot_images
