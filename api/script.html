@@ -37,7 +37,7 @@
   }
 </style>
 <div id="report-download-bar">
-  <button id="download-pdf-btn">Baixar PDF</button>
+  <button id="download-pdf-btn" data-farm-code="{{ farm_code }}" data-today-date="{{ today_date }}">Baixar PDF</button>
 </div>
 <script>
   (function () {
@@ -48,7 +48,7 @@
       try {
         btn.disabled = true;
         btn.textContent = 'Gerando PDF...';
-        
+
         // Envia a URL atual da página para o serviço gerar o PDF
         const response = await fetch(PDF_SERVICE_URL, {
           method: 'POST',
@@ -70,7 +70,12 @@
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `relatorio-${new Date().toISOString().split('T')[0]}.pdf`;
+
+        // Usar dados do template ou fallback para data
+        const farmCode = btn.dataset.farmCode || 'relatorio';
+        const todayDate = btn.dataset.todayDate || new Date().toISOString().split('T')[0];
+        a.download = `${farmCode}-${todayDate}.pdf`;
+
         document.body.appendChild(a);
         a.click();
         a.remove();

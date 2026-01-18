@@ -14,48 +14,57 @@ class PlotDataExtractor:
     def __init__(self):
         self.notion_service = NotionService()
         self.notion_utils = NotionUtils()
-        logger.info("PlotDataExtractor initialized")
+        logger.info("[INIT] PlotDataExtractor initialized")
 
     async def extract_plots_data(self, page_id: str) -> list[dict]:
-        """
-        Extrai dados de talhões de uma página, incluindo imagens das propriedades e blocos.
-        Usa busca flexível para lidar com variações nos nomes das propriedades.
-        """
-        logger.info(f"Extracting plots data from page {page_id}")
+        """Extrai dados de talhões de uma página, incluindo imagens."""
+        logger.info(f"[EXTRACT] Starting plot extraction | page_id={page_id[:8]}")
 
-        # Get page properties and blocks
-        page = await self.notion_service.async_get_page(page_id)
-        blocks = await self.notion_service.async_get_page_blocks(page_id)
+        try:
+            page = await self.notion_service.async_get_page(page_id)
+            blocks = await self.notion_service.async_get_page_blocks(page_id)
 
-        properties = page.get("properties", {})
+            properties = page.get("properties", {})
+            logger.debug(
+                f"[EXTRACT] Page loaded | properties={len(properties)} | blocks={len(blocks)}"
+            )
 
-        # Extract plot data from properties (flexible matching)
-        plots = self._extract_plots_from_properties_flexible(properties)
-        logger.info(f"Extracted {len(plots)} plots from properties")
+            # Extract plot data from properties
+            plots = self._extract_plots_from_properties_flexible(properties)
+            logger.info(
+                f"[EXTRACT] Plots extracted from properties | count={len(plots)}"
+            )
 
-        # Extract images from property files first (preferred source)
-        plots = self._extract_images_from_properties(plots, properties)
+            # Extract images from property files
+            plots = self._extract_images_from_properties(plots, properties)
+            logger.debug("[EXTRACT] Images extracted from properties")
 
-        # Then try to extract images from blocks (fallback)
-        plots_with_images = self._associate_images_with_plots(plots, blocks)
-        logger.info(
-            f"Associated images with plots: {len(plots_with_images)} plots total"
-        )
+            # Associate images from blocks (fallback)
+            plots_with_images = self._associate_images_with_plots(plots, blocks)
+            logger.info(
+                f"[EXTRACT] Plot extraction completed | total_plots={len(plots_with_images)}"
+            )
 
-        return plots_with_images
+            return plots_with_images
+        except Exception as e:
+            logger.error(
+                f"[EXTRACT] Failed to extract plots | page_id={page_id[:8]}",
+                extra={"error": e},
+                exc_info=True,
+            )
+            raise
 
     def _extract_images_from_properties(
         self, plots: list[dict], properties: dict
     ) -> list[dict]:
-        """
-        Extrai imagens das propriedades 'Upload de Fotos - XX'.
-        Estas propriedades contêm arquivos diretamente associados a cada talhão.
-        Retorna imagens no formato: {"url": str, "name": str}
-        """
+        """Extrai imagens das propriedades 'Upload de Fotos - XX'."""
+        logger.debug(
+            f"[IMAGES-PROPS] Extracting images from properties | properties_count={len(properties)}"
+        )
+
         for plot in plots:
             plot_index = plot["index"]
 
-            # Buscar propriedade de upload de fotos para este talhão
             upload_key = self._find_related_property(
                 properties,
                 plot_index,
@@ -65,47 +74,38 @@ class PlotDataExtractor:
 
             if upload_key:
                 files_data = properties[upload_key].get("files", [])
+                logger.debug(
+                    f"[IMAGES-PROPS] Plot {plot_index:02d} | images_found={len(files_data)}"
+                )
 
-                # Extrair URLs dos arquivos no formato esperado
                 for file_item in files_data:
                     if file_item.get("type") == "file":
                         file_url = file_item.get("file", {}).get("url")
                         if file_url:
-                            # Formato compatível com merge_plot_data
                             plot["images"].append(
                                 {"url": file_url, "name": file_item.get("name", "")}
                             )
-                            logger.debug(
-                                f"Plot {plot_index:02d}: added image from property '{upload_key}'"
-                            )
 
-                logger.debug(
-                    f"Plot {plot_index:02d}: found {len(files_data)} images in properties"
-                )
-
+        logger.debug("[IMAGES-PROPS] Property images extraction completed")
         return plots
 
     def _extract_plots_from_properties_flexible(self, properties: dict) -> list[dict]:
-        """
-        Extrai dados de talhões usando busca flexível de propriedades.
-        Lida com variações como espaços extras, sufixos (1), _ok, etc.
-        """
+        """Extrai dados de talhões usando busca flexível de propriedades."""
+        logger.debug("[EXTRACT-PROPS] Starting flexible property extraction")
+
         plots = []
 
-        # Encontrar todas as propriedades de talhão
         talhao_map = self.notion_utils.find_all_talhao_properties(
             properties, "talhao visitado"
         )
 
         logger.debug(
-            f"Found {len(talhao_map)} talhão properties: {list(talhao_map.keys())}"
+            f"[EXTRACT-PROPS] Talhão properties found | count={len(talhao_map)}"
         )
 
-        # Processar cada talhão encontrado
         for index in sorted(talhao_map.keys()):
             talhao_key = talhao_map[index]
 
-            # Buscar propriedades relacionadas com variações
             estagio_key = self._find_related_property(
                 properties,
                 index,
@@ -117,19 +117,16 @@ class PlotDataExtractor:
                 properties, index, "avaliacao", ["Avaliação", "Avaliacao"]
             )
 
-            # Extrair dados do talhão
             talhao_data = properties[talhao_key].get("multi_select", [])
 
             if not talhao_data:
-                logger.debug(f"Talhão {index:02d}: no data in multi_select")
+                logger.debug(f"[EXTRACT-PROPS] Talhão {index:02d} | no data")
                 continue
 
-            # Extrair estádio fenológico
             growth_stage = []
             if estagio_key:
                 estagio_data = properties[estagio_key].get("multi_select", [])
                 if not estagio_data:
-                    # Tentar rich_text como fallback
                     estagio_rich = properties[estagio_key].get("rich_text", [])
                     growth_stage = [
                         item.get("plain_text", "")
@@ -140,23 +137,17 @@ class PlotDataExtractor:
                     growth_stage = [
                         item["name"] for item in estagio_data if item.get("name")
                     ]
-            else:
-                logger.debug(f"Talhão {index:02d}: Estádio property not found")
 
-            # Extrair avaliação
             assessment = []
             if avaliacao_key:
                 avaliacao_data = properties[avaliacao_key].get("rich_text", [])
                 assessment = [item.get("plain_text", "") for item in avaliacao_data]
-            else:
-                logger.debug(f"Talhão {index:02d}: Avaliação property not found")
 
-            # Extrair nomes dos talhões
             talhao_names = [item["name"] for item in talhao_data if item.get("name")]
 
             logger.debug(
-                f"Talhão {index:02d}: found {len(talhao_names)} names, "
-                f"growth_stage={growth_stage}, assessment={'Yes' if assessment else 'No'}"
+                f"[EXTRACT-PROPS] Talhão {index:02d} | plots={len(talhao_names)} | "
+                f"growth_stage={len(growth_stage)} | assessment={len(assessment)}"
             )
 
             plot_data = {
@@ -169,6 +160,7 @@ class PlotDataExtractor:
 
             plots.append(plot_data)
 
+        logger.debug(f"[EXTRACT-PROPS] Total plots extracted | count={len(plots)}")
         return plots
 
     def _find_related_property(
@@ -178,18 +170,7 @@ class PlotDataExtractor:
         base_pattern: str,
         name_variants: List[str],
     ) -> str | None:
-        """
-        Busca uma propriedade relacionada a um talhão específico.
-
-        Args:
-            properties: Dicionário de propriedades
-            index: Índice do talhão (1-18)
-            base_pattern: Padrão base normalizado (ex: "estadio fenologico")
-            name_variants: Variações do nome (ex: ["Estádio Fenológico", "Estadio Fenologico"])
-
-        Returns:
-            Chave da propriedade encontrada ou None
-        """
+        """Busca uma propriedade relacionada a um talhão específico."""
         # Gerar todas as variações possíveis de busca
         search_patterns = []
 
@@ -209,21 +190,28 @@ class PlotDataExtractor:
         )
 
         if found_key:
-            logger.debug(f"Found related property for index {index}: {found_key}")
+            logger.debug(
+                f"[EXTRACT-PROPS] Property found for {base_pattern} - {index:02d}"
+            )
+        else:
+            logger.debug(
+                f"[EXTRACT-PROPS] Property NOT found for {base_pattern} - {index:02d}"
+            )
 
         return found_key
 
     def _associate_images_with_plots(
         self, plots: list[dict], blocks: list[dict]
     ) -> list[dict]:
-        """
-        Associa imagens dos blocos aos talhões (usado como fallback se não houver imagens nas properties).
-        """
+        """Associa imagens dos blocos aos talhões (usado como fallback se não houver imagens nas properties)."""
         # Collect all images from blocks
         all_images = self._extract_images_from_blocks(blocks)
-        logger.debug(f"Found {len(all_images)} images in blocks")
+        logger.debug(
+            f"[IMAGES-BLOCKS] Total images in blocks | count={len(all_images)}"
+        )
 
         # Associate images with plots based on heading context (only if no images yet)
+        associated_count = 0
         for plot in plots:
             if not plot[
                 "images"
@@ -233,15 +221,21 @@ class PlotDataExtractor:
                     plot_index, all_images, blocks
                 )
                 plot["images"].extend(block_images)
+                associated_count += len(block_images)
                 logger.debug(
-                    f"Plot {plot_index:02d}: added {len(block_images)} images from blocks"
+                    f"[IMAGES-BLOCKS] Plot {plot_index:02d} | associated={len(block_images)}"
                 )
 
+        logger.debug(
+            f"[IMAGES-BLOCKS] Total associations completed | count={associated_count}"
+        )
         return plots
 
     def _extract_images_from_blocks(self, blocks: list[dict]) -> list[dict]:
         """Extrai todas as imagens dos blocos."""
         images = []
+        logger.debug("[IMAGES-BLOCKS] Starting image extraction from blocks")
+
         for block in blocks:
             block_type = block.get("type")
             if block_type == "image":
@@ -266,6 +260,11 @@ class PlotDataExtractor:
                             "caption": caption,
                         }
                     )
+                    logger.debug(
+                        f"[IMAGES-BLOCKS] Image found | block_id={block.get('id')[:8]} | has_caption={bool(caption)}"
+                    )
+
+        logger.debug(f"[IMAGES-BLOCKS] Extraction complete | total={len(images)}")
         return images
 
     def _find_images_for_plot(

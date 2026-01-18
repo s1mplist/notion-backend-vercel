@@ -11,29 +11,23 @@ logger = get_logger(__name__)
 
 
 def data_uri_for_local_image(template_dir: Path, rel_path: str) -> str | None:
-    """Convert local image to data URI for embedding in HTML.
+    """Convert local image to data URI."""
+    logger.debug(f"[IMAGE] Converting to data URI | path={rel_path}")
 
-    Args:
-        template_dir: Base directory for templates
-        rel_path: Relative path to the image (e.g., './images/logo.png')
-
-    Returns:
-        Data URI string or None if conversion fails
-    """
-    # Support ./images/... or images/...
     rel = rel_path.lstrip("./")
     img_path = template_dir / rel
 
-    # Fallback: try templates/assets/<rel> (so ./images/... resolves to templates/assets/images/...)
     if not img_path.exists():
         try:
-            root_templates = template_dir.parent.parent  # .../templates
+            root_templates = template_dir.parent.parent
             alt_path = root_templates / "assets" / rel
             if alt_path.exists():
                 img_path = alt_path
             else:
+                logger.warning(f"[IMAGE] Image not found | path={rel_path}")
                 return None
         except Exception:
+            logger.warning(f"[IMAGE] Image not found | path={rel_path}")
             return None
 
     try:
@@ -42,22 +36,19 @@ def data_uri_for_local_image(template_dir: Path, rel_path: str) -> str | None:
         if not mime:
             mime = "image/jpeg"
         b64 = base64.b64encode(data).decode("ascii")
+        logger.debug(f"[IMAGE] Data URI created | size={len(data)} bytes")
         return f"data:{mime};base64,{b64}"
-    except Exception as e:
-        logger.exception("Failed to inline image %s: %s", img_path, e)
+    except Exception:
+        logger.error(
+            f"[IMAGE] Failed to convert image | path={rel_path}", exc_info=True
+        )
         return None
 
 
 def inline_local_images(html: str, template_dir: Path) -> str:
-    """Inline local images into HTML as data URIs.
+    """Inline all local images in HTML as data URIs."""
+    logger.debug(f"[INLINE] Starting image inlining | template_dir={template_dir}")
 
-    Args:
-        html: HTML content
-        template_dir: Base directory for templates
-
-    Returns:
-        HTML with inlined images
-    """
     markers = [
         'src="./images/',
         'src="images/',
@@ -70,8 +61,7 @@ def inline_local_images(html: str, template_dir: Path) -> str:
             if idx == -1:
                 break
 
-            # Find the opening and closing quotes of the src attribute
-            q1 = html.find('"', idx)  # the first quote after src=
+            q1 = html.find('"', idx)
             q2 = html.find('"', q1 + 1)
 
             if q1 == -1 or q2 == -1:
@@ -86,4 +76,5 @@ def inline_local_images(html: str, template_dir: Path) -> str:
             else:
                 start = q2 + 1
 
+    logger.debug("[INLINE] Image inlining completed")
     return html

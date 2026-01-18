@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from typing import Any
 
@@ -8,7 +9,12 @@ from services.html.image import optimize_html_images
 from services.html.render import HTMLRenderer
 from services.notion.mapper import NotionDataMapper
 from services.notion.notion_service import NotionService
-from utils.logging import get_logger
+from utils.logging import (
+    get_logger,
+    log_operation_end,
+    log_operation_error,
+    log_operation_start,
+)
 from utils.notion import NotionUtils
 
 
@@ -42,6 +48,7 @@ class ReportGenerator:
         self.data_mapper = NotionDataMapper()
         self.html_renderer = HTMLRenderer()
         self.notion_utils = NotionUtils()
+        logger.info("[INIT] ReportGenerator initialized")
 
     async def _get_data_sources(self) -> tuple[str, str]:
         return await self.notion_service.get_data_source_ids()
@@ -49,54 +56,67 @@ class ReportGenerator:
     async def generate_report_with_template(
         self, page_id: str, template_slug: str
     ) -> dict[str, Any]:
-        """
-        Generate a complete report and render it using a specific template bundle under
-        templates/relatorios/{template_slug}.
+        """Generate a complete report with specific template."""
+        log_operation_start(
+            logger,
+            "generate_report_with_template",
+            page_id=page_id[:8],
+            template=template_slug,
+        )
 
-        Args:
-            page_id: FACT page ID
-            template_slug: e.g., "terras-gerais"
-
-        Returns:
-            Dict with html_content and metadata
-        """
         try:
-            logger.info(
-                f"Generating report for page_id={page_id} with template={template_slug}"
-            )
-
-            # 1. Data sources
+            # 1. Get data sources
+            logger.debug("[STEP:1] Fetching data sources")
             fact_ds_id, talhoes_ds_id = (
                 self.notion_service.get_fact_and_talhoes_data_sources()
             )
+            logger.debug(
+                f"[STEP:1] Data sources obtained: fact={fact_ds_id[:8]}, talhoes={talhoes_ds_id[:8]}"
+            )
 
-            # 2. FACT data
+            # 2. Query FACT data
+            logger.debug("[STEP:2] Querying FACT data")
             fact_data = await self.notion_service.async_query_fact_by_page_id(
                 fact_ds_id, page_id
             )
 
             if not fact_data:
-                raise ValueError(f"FACT page {page_id} not found")
-            fact_item = fact_data[0]
+                error_msg = f"FACT page {page_id} not found"
+                logger.error(f"[STEP:2] {error_msg}")
+                raise ValueError(error_msg)
 
-            # 4. Talhões data
+            fact_item = fact_data[0]
+            logger.debug("[STEP:2] FACT data retrieved")
+
+            # 3. Query talhões data
+            logger.debug("[STEP:3] Querying talhões data")
             talhoes_data = self.notion_service.query_talhoes_by_farm_ids(
                 talhoes_ds_id, fact_item.get("farm")
             )
+            logger.debug(
+                f"[STEP:3] Talhões data retrieved: {len(talhoes_data)} talhões"
+            )
 
-            # 5. Farm name
+            # 4. Farm name
+            logger.debug("[STEP:4] Resolving farm name")
             farm_name = fact_item.get("nome_fazenda")
+            logger.debug(f"[STEP:4] Farm name: {farm_name}")
 
-            # 6. Original page + plots/images (use NotionService async wrapper)
+            # 5. Get page and extract plots
+            logger.debug("[STEP:5] Extracting plots data")
             page_data = await self.notion_service.async_get_page(page_id)
             plots_with_images = await self.plot_extractor.extract_plots_data(page_id)
+            logger.debug(f"[STEP:5] Plots extracted: {len(plots_with_images)} plots")
 
-            # 7. Merge
+            # 6. Merge data
+            logger.debug("[STEP:6] Merging plot and talhões data")
             enriched_plots = self.notion_service.merge_plot_data(
                 talhoes_data, plots_with_images
             )
+            logger.debug(f"[STEP:6] Enriched plots: {len(enriched_plots)} plots")
 
-            # 8. Report model
+            # 7. Build report model
+            logger.debug("[STEP:7] Building report model")
             report_data = self._build_report_model(
                 fact_item=fact_item,
                 page_data=page_data,
@@ -104,20 +124,40 @@ class ReportGenerator:
                 farm_name=farm_name,
                 talhoes_data=talhoes_data,
             )
+            logger.debug(
+                "[STEP:7] Report model built",
+                extra={"farm": report_data.farm_name, "plots": len(report_data.plots)},
+            )
 
-            # 9. Render with selected template
+            # 8. Render HTML
+            logger.debug(f"[STEP:8] Rendering HTML with template: {template_slug}")
             html_content = await self.html_renderer.render_template_slug(
                 template_slug, report_data
             )
+            logger.debug(f"[STEP:8] HTML rendered: {len(html_content)} bytes")
 
-            # 10. OTIMIZAR IMAGENS ANTES DE GERAR PDF
-            logger.info("Optimizing images in HTML...")
-            html_content = optimize_html_images(
-                html_content,
-                quality=70,  # Ajuste conforme necessário (40-80)
+            # 9. Optimize images
+            logger.debug("[STEP:9] Optimizing images")
+            html_content = optimize_html_images(html_content, quality=70)
+            logger.debug(f"[STEP:9] Images optimized: {len(html_content)} bytes")
+
+            # 10. Get farm code
+            logger.debug("[STEP:10] Fetching farm code")
+            farm_code_page = await self.notion_service.async_get_page(
+                fact_item.get("farm")[0]
             )
 
-            return {
+            # Debug: Check the structure of Name property
+            name_prop = farm_code_page.get("properties", {}).get("Name", {})
+            logger.debug(f"[STEP:10] Name property type: {name_prop.get('type')}")
+            logger.debug(f"[STEP:10] Name property content: {name_prop}")
+
+            # Try multiple extraction methods
+            farm_code = self.notion_utils.extract_title(name_prop)
+
+            logger.debug(f"[STEP:10] Farm code: {farm_code}")
+
+            result = {
                 "status": "success",
                 "page_id": page_id,
                 "farm_name": farm_name,
@@ -127,10 +167,28 @@ class ReportGenerator:
                     "fact_item": fact_item,
                     "talhoes_count": len(talhoes_data),
                     "template": template_slug,
+                    "farm_code": re.sub(r"-\d+$", "", farm_code),
                 },
             }
+
+            log_operation_end(
+                logger,
+                "generate_report_with_template",
+                farm=farm_name,
+                plots=len(enriched_plots),
+                template=template_slug,
+            )
+
+            return result
+
         except Exception as e:
-            logger.error(f"Error generating report with template: {e}", exc_info=True)
+            log_operation_error(
+                logger,
+                "generate_report_with_template",
+                e,
+                page_id=page_id[:8],
+                template=template_slug,
+            )
             raise
 
     async def _query_fact_data(self, fact_ds_id: str, page_id: str) -> list[dict]:
@@ -184,13 +242,25 @@ class ReportGenerator:
 
         # Parse dates
         try:
-            current_visit_date = datetime.strptime(visit_date_str, "%d/%m/%Y")
+            if visit_date_str and visit_date_str.strip():
+                current_visit_date = datetime.strptime(visit_date_str, "%d/%m/%Y")
+            else:
+                current_visit_date = datetime.now()
         except (ValueError, TypeError):
+            logger.debug(
+                f"[STEP:6] Failed to parse visit date | date='{visit_date_str}'"
+            )
             current_visit_date = datetime.now()
 
         try:
-            next_visit_date = datetime.strptime(return_date_str, "%d/%m/%Y")
+            if return_date_str and return_date_str.strip():
+                next_visit_date = datetime.strptime(return_date_str, "%d/%m/%Y")
+            else:
+                next_visit_date = datetime.now()
         except (ValueError, TypeError):
+            logger.debug(
+                f"[STEP:6] Failed to parse return date | date='{return_date_str}'"
+            )
             next_visit_date = datetime.now()
 
         if talhoes_data and len(talhoes_data) > 0:

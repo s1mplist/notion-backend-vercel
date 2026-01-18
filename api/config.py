@@ -52,17 +52,6 @@ class Settings(BaseSettings):
     )
     api_version: str = Field(default="1.0.0", description="API version")
 
-    # HTML Rendering / Audit
-    enable_html_audit: bool = Field(
-        default=False,
-        description="Enable detailed HTML audit logs (debug only)",
-    )
-    html_audit_max_chars: int = Field(
-        default=12000,
-        description="Max characters of HTML to include in audit logs",
-        gt=1000,
-    )
-
     # Public Base URL for shareable links (e.g., https://your-app.vercel.app)
     public_base_url: str | None = Field(
         default=None,

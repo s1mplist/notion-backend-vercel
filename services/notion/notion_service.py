@@ -24,7 +24,7 @@ class NotionService:
         self.async_client = None
         self.notion_utils = NotionUtils()
 
-        logger.info("NotionService initialized.")
+        logger.debug("[INIT] NotionService initialized")
 
     # -----------------------
     # Page retrieval
@@ -41,15 +41,17 @@ class NotionService:
 
     def get_pages(self, page_ids: list[str]) -> list[dict[str, Any]]:
         """Retrieve multiple pages by IDs (sync)."""
+        logger.debug(f"[QUERY] Fetching {len(page_ids)} pages")
         pages = [self.get_page(pid) for pid in page_ids]
-        logger.info(f"Retrieved {len(pages)} pages.")
+        logger.debug(f"[QUERY] Retrieved {len(pages)} pages")
         return pages
 
     async def async_get_pages(self, page_ids: list[str]) -> list[dict[str, Any]]:
         """Retrieve multiple pages by IDs (async)."""
+        logger.debug(f"[QUERY-ASYNC] Fetching {len(page_ids)} pages")
         tasks = [self.async_get_page(pid) for pid in page_ids]
         pages = await asyncio.gather(*tasks, return_exceptions=False)
-        logger.info(f"Async retrieved {len(pages)} pages.")
+        logger.debug(f"[QUERY-ASYNC] Retrieved {len(pages)} pages")
         return pages
 
     # -----------------------
@@ -79,52 +81,67 @@ class NotionService:
     # -----------------------
     def get_data_source_id(self, database_id: str) -> str:
         """Get the first data source ID from a database (sync)."""
+        logger.debug(f"[QUERY] Fetching data source ID | database={database_id[:8]}")
         with Client(auth=settings.notion_token) as client:
             db = client.databases.retrieve(database_id=database_id)
         ds_list = db.get("data_sources") or []
 
-        logger.info(f"Retrieved data sources for database {database_id}: {ds_list}")
-
         if not ds_list:
-            logger.error(f"Database {database_id} has no data sources.")
-            raise RuntimeError(f"Database {database_id} does not have data_sources.")
-        return ds_list[0]["id"]
+            logger.error(
+                f"[QUERY] Database has no data sources | database={database_id[:8]}"
+            )
+            raise RuntimeError(f"Database {database_id} does not have data_sources")
+
+        ds_id = ds_list[0]["id"]
+        logger.debug(f"[QUERY] Data source ID found | ds_id={ds_id[:8]}")
+        return ds_id
 
     async def async_get_data_source_id(self, database_id: str) -> str:
         """Get the first data source ID from a database (async)."""
+        logger.debug(
+            f"[QUERY-ASYNC] Fetching data source ID | database={database_id[:8]}"
+        )
         async with AsyncClient(auth=settings.notion_token) as notion:
             db = await notion.databases.retrieve(database_id=database_id)
         ds_list = db.get("data_sources") or []
 
-        logger.info(
-            f"Async retrieved data sources for database {database_id}: {ds_list}"
-        )
-
         if not ds_list:
-            logger.error(f"Database {database_id} has no data sources (async).")
-            raise RuntimeError(f"Database {database_id} does not have data_sources.")
-        return ds_list[0]["id"]
+            logger.error(
+                f"[QUERY-ASYNC] Database has no data sources | database={database_id[:8]}"
+            )
+            raise RuntimeError(f"Database {database_id} does not have data_sources")
+
+        ds_id = ds_list[0]["id"]
+        logger.debug(f"[QUERY-ASYNC] Data source ID found | ds_id={ds_id[:8]}")
+        return ds_id
 
     def get_fact_and_talhoes_data_sources(self) -> tuple[str, str]:
         """Get data source IDs for FACT and Talhões databases (sync)."""
-        logger.info("Getting data source IDs for FACT and Talhões databases (sync).")
+        logger.debug("[QUERY] Fetching FACT and Talhões data source IDs")
         fact_ds_id = self.get_data_source_id(settings.notion_fact_database_id)
         talhoes_ds_id = self.get_data_source_id(settings.notion_talhoes_database_id)
+        logger.debug(
+            f"[QUERY] Data sources found | fact={fact_ds_id[:8]} | talhoes={talhoes_ds_id[:8]}"
+        )
         return fact_ds_id, talhoes_ds_id
 
     async def async_get_fact_and_talhoes_data_sources(self) -> tuple[str, str]:
         """Asynchronously get data source IDs for FACT and Talhões databases (async)."""
+        logger.debug("[QUERY-ASYNC] Fetching FACT and Talhões data source IDs")
         fact_ds_id = await self.async_get_data_source_id(
             settings.notion_fact_database_id
         )
         talhoes_ds_id = await self.async_get_data_source_id(
             settings.notion_talhoes_database_id
         )
-        logger.info("Async retrieved data source IDs for FACT and Talhões databases.")
+        logger.debug(
+            f"[QUERY-ASYNC] Data sources found | fact={fact_ds_id[:8]} | talhoes={talhoes_ds_id[:8]}"
+        )
         return fact_ds_id, talhoes_ds_id
 
     async def get_data_source_ids(self) -> tuple[str, str]:
         """Legacy async helper that retrieves data source IDs using an async context."""
+        logger.debug("[QUERY-ASYNC] Fetching FACT and Talhões data source IDs (legacy)")
         async with AsyncClient(auth=settings.notion_token) as notion:
             fact_db = await notion.databases.retrieve(
                 database_id=settings.notion_fact_database_id
@@ -134,10 +151,11 @@ class NotionService:
                 database_id=settings.notion_talhoes_database_id
             )
 
-        logger.info("Retrieved data source IDs for FACT and Talhões databases.")
-
         fact_ds_id = fact_db["data_sources"][0]["id"]
         talhoes_ds_id = talhoes_db["data_sources"][0]["id"]
+        logger.debug(
+            f"[QUERY-ASYNC] Data sources found | fact={fact_ds_id[:8]} | talhoes={talhoes_ds_id[:8]}"
+        )
         return fact_ds_id, talhoes_ds_id
 
     # -----------------------
