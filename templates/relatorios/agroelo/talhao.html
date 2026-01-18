@@ -1,0 +1,36 @@
+<div class="talhao">
+  <div class="talhao-info">
+    <div>
+      <div class="info-label">Talhão</div>
+      <div class="info-value">{{ plot.name }}</div>
+    </div>
+    <div>
+      <div class="info-label">Área</div>
+      <div class="info-value">{{ plot.area }}ha</div>
+    </div>
+    <div>
+      <div class="info-label">Estádio Fenológico</div>
+      <div class="info-value badge badge-secondary">{{ plot.growth_stage }}</div>
+    </div>
+  </div>
+
+  <div class="card mb-1">
+    <div class="info-label">Cultura e Variedade</div>
+    <div class="info-value mt-1">{{ plot.crop }} - {{ plot.variety }}</div>
+  </div>
+
+  <div class="images-and-assessment-group">
+    <div class="image-gallery">
+      {% for image in plot.images %}
+        <div class="gallery-image-wrapper">
+          <img src="{{ image.url }}" alt="{{ image.description }}" class="gallery-image" loading="eager" decoding="async" style="max-width:100%;height:auto;display:block;" onerror="this.style.display='none'" />
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="avaliacao">
+      <div class="info-label mb-1">Avaliação</div>
+      <div>{{ plot.assessment }}</div>
+    </div>
+  </div>
+</div>
