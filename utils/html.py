@@ -48,28 +48,6 @@ def data_uri_for_local_image(template_dir: Path, rel_path: str) -> str | None:
         return None
 
 
-def inline_css(html: str, css_content: str) -> str:
-    """Inline CSS content into HTML by replacing link tags.
-
-    Args:
-        html: HTML content
-        css_content: CSS content to inline
-
-    Returns:
-        HTML with inlined CSS
-    """
-    if not css_content:
-        return html
-
-    style_tag = f"<style>\n{css_content}\n</style>"
-
-    # Replace various forms of CSS link tags
-    html = html.replace('<link rel="stylesheet" href="styles.css">', style_tag)
-    html = html.replace('<link rel="stylesheet" href="./styles.css">', style_tag)
-
-    return html
-
-
 def inline_local_images(html: str, template_dir: Path) -> str:
     """Inline local images into HTML as data URIs.
 
@@ -107,24 +85,5 @@ def inline_local_images(html: str, template_dir: Path) -> str:
                 start = q1 + 1 + len(data_uri)
             else:
                 start = q2 + 1
-
-    return html
-
-
-def inline_assets(html: str, template_dir: Path, css_content: str) -> str:
-    """Inline all assets (CSS and images) into HTML.
-
-    Args:
-        html: HTML content
-        template_dir: Base directory for templates
-        css_content: CSS content to inline
-
-    Returns:
-        HTML with all assets inlined
-    """
-    html = inline_css(html, css_content)
-    html = inline_local_images(html, template_dir)
-
-    logger.debug("HTML content after inlining assets: %s", html[:500])
 
     return html

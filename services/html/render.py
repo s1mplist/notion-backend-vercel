@@ -8,7 +8,7 @@ from jinja2 import Environment, FileSystemLoader, TemplateNotFound, select_autoe
 
 from api.config import get_settings
 from models.report import Report
-from utils.html import inline_assets
+from utils.html import inline_local_images
 from utils.logging import get_logger
 
 
@@ -46,9 +46,6 @@ class HTMLRenderer:
             self.report_template = self.env.get_template("report_template.html")
         except TemplateNotFound:
             self.report_template = None
-
-        # Default styles for legacy rendering
-        self._styles = self._read_styles(self.templates_root)
 
         # Audit logging configuration
         self._enable_html_audit = settings.enable_html_audit
@@ -95,15 +92,6 @@ class HTMLRenderer:
             f"Templates directory not found. Tried TEMPLATES_DIR, settings.templates_dir,"
             f" parents of {here}, and {cwd_candidate}"
         )
-
-    def _read_styles(self, base_dir: Path) -> str:
-        """Read the CSS file and return its contents."""
-        css_path = base_dir / "styles.css"
-        try:
-            return css_path.read_text(encoding="utf-8")
-        except Exception:
-            logger.warning("CSS file not found; continuing without styles")
-            return ""
 
     async def render_report_html(self, report_data: Report) -> str:
         """
@@ -208,7 +196,6 @@ class HTMLRenderer:
         )
 
         template = env.get_template("template.html")
-        styles = self._read_styles(base_dir)
 
         next_visit = getattr(report_data, "next_visit_date", None)
         current_visit = getattr(report_data, "current_visit_date", None)
@@ -230,21 +217,12 @@ class HTMLRenderer:
         }
 
         html = await template.render_async(**context)
-        final_html = inline_assets(html, base_dir, styles)
+        final_html = inline_local_images(html, base_dir)
 
         if self._enable_html_audit:
             self._log_html_audit(final_html, context, report_data)
 
         return final_html
-
-    def get_css_content(self) -> str:
-        """
-        Get the CSS content for external usage.
-
-        Returns:
-            CSS content as string
-        """
-        return self._styles
 
     def _log_html_audit(self, html_content: str, context: dict, report_data: Report):
         """

@@ -343,6 +343,29 @@ class NotionUtils:
             return s.get("name") if s else None
         if ptype == "files":
             return self.extract_files(prop)
+
+        # Support for formula properties
+        if ptype == "formula":
+            formula = prop.get("formula") or {}
+            formula_type = formula.get("type")
+
+            # Formula can return various types
+            if formula_type == "string":
+                return formula.get("string")
+            elif formula_type == "number":
+                return formula.get("number")
+            elif formula_type == "boolean":
+                return formula.get("boolean")
+            elif formula_type == "date":
+                # Extract date from formula result
+                date_obj = formula.get("date") or {}
+                return {"start": date_obj.get("start"), "end": date_obj.get("end")}
+            else:
+                logger.debug(
+                    f"Unknown formula type: {formula_type} in formula: {formula}"
+                )
+                return None
+
         logger.warning("Unknown Notion property type: %r in prop: %r", ptype, prop)
         return None
 
