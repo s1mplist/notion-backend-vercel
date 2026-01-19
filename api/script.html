@@ -74,7 +74,7 @@
         // Usar dados do template ou fallback para data
         const farmCode = btn.dataset.farmCode || 'relatorio';
         const todayDate = btn.dataset.todayDate || new Date().toISOString().split('T')[0];
-        a.download = `${farmCode}-${todayDate}.pdf`;
+        a.download = `RVT_${todayDate}_${farmCode}.pdf`;
 
         document.body.appendChild(a);
         a.click();

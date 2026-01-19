@@ -1,4 +1,3 @@
-import re
 from datetime import datetime
 from typing import Any
 
@@ -87,6 +86,8 @@ class ReportGenerator:
 
             fact_item = fact_data[0]
             logger.debug("[STEP:2] FACT data retrieved")
+            logger.debug(f"[STEP:2] FACT item keys: {list(fact_item.keys())}")
+            logger.debug(f"[STEP:2] FACT item preview: {fact_item}")
 
             # 3. Query talhões data
             logger.debug("[STEP:3] Querying talhões data")
@@ -142,18 +143,7 @@ class ReportGenerator:
             logger.debug(f"[STEP:9] Images optimized: {len(html_content)} bytes")
 
             # 10. Get farm code
-            logger.debug("[STEP:10] Fetching farm code")
-            farm_code_page = await self.notion_service.async_get_page(
-                fact_item.get("farm")[0]
-            )
-
-            # Debug: Check the structure of Name property
-            name_prop = farm_code_page.get("properties", {}).get("Name", {})
-            logger.debug(f"[STEP:10] Name property type: {name_prop.get('type')}")
-            logger.debug(f"[STEP:10] Name property content: {name_prop}")
-
-            # Try multiple extraction methods
-            farm_code = self.notion_utils.extract_title(name_prop)
+            farm_code = fact_item.get("cod_fazenda")
 
             logger.debug(f"[STEP:10] Farm code: {farm_code}")
 
@@ -167,7 +157,7 @@ class ReportGenerator:
                     "fact_item": fact_item,
                     "talhoes_count": len(talhoes_data),
                     "template": template_slug,
-                    "farm_code": re.sub(r"-\d+$", "", farm_code),
+                    "farm_code": farm_code,
                 },
             }
 
