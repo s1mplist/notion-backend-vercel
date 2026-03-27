@@ -1,10 +1,10 @@
 /* Variáveis CSS */
 :root {
-    --primary-color: #07641b;
-    --secondary-color: #26ab0ff4;
+    --primary-color: #024e2a;
+    --secondary-color: #8fc36f;
     --text-color: #333;
     --border-color: #e0e0e0;
-    --background-light: #f5f5f5;
+    --background-light: #fcfdf3;
     --spacing-unit: 1rem;
     --spacing-half: 0.5rem;
     --spacing-quarter: 0.25rem;
