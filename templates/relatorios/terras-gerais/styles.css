@@ -130,7 +130,7 @@ body {
 
 .talhao-info {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: var(--spacing-half);
     background: var(--background-light);
     padding: var(--spacing-half);

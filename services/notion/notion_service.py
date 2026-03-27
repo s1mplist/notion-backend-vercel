@@ -420,6 +420,7 @@ class NotionService:
             )
 
             talhao_appears_in_plots = False
+            dias_plantio_val = self._parse_dias_plantio(talhao.get("dias_plantio"))
 
             if talhao_id.strip() in plot_ids_with_images:
                 talhao_appears_in_plots = True
@@ -549,6 +550,7 @@ class NotionService:
                         images=images_list,
                         additional_images=additional_images_val,
                         assessment=assessment_text or "",
+                        dias_plantio=dias_plantio_val,
                     )
                     merged_plots.append(plot)
             else:
@@ -567,6 +569,7 @@ class NotionService:
                     images=images_list,
                     additional_images=additional_images_val,
                     assessment=assessment_text or "",
+                    dias_plantio=dias_plantio_val,
                 )
                 merged_plots.append(plot)
 
@@ -613,3 +616,54 @@ class NotionService:
             }
 
         return result
+
+    def _parse_dias_plantio(self, value: Any) -> int | None:
+        if value is None:
+            return None
+
+        if isinstance(value, dict):
+            # Notion formula/number property shapes can be nested objects.
+            if value.get("type") == "formula":
+                formula = value.get("formula") or {}
+                formula_type = formula.get("type")
+                if formula_type == "number":
+                    return self._parse_dias_plantio(formula.get("number"))
+                if formula_type == "string":
+                    return self._parse_dias_plantio(formula.get("string"))
+                if formula_type == "boolean":
+                    return 1 if formula.get("boolean") else None
+                return None
+            for key in ("number", "string", "boolean"):
+                if key in value:
+                    return self._parse_dias_plantio(value.get(key))
+            return None
+
+        if isinstance(value, list):
+            if not value:
+                return None
+            return self._parse_dias_plantio(value[0])
+
+        if isinstance(value, bool):
+            return 1 if value else None
+
+        if isinstance(value, (int, float)):
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return None
+
+        if isinstance(value, str):
+            value = value.strip()
+            if value == "":
+                return None
+            value = value.replace(",", ".")
+            # extract numeric substring from formula string results
+            match = re.search(r"-?\d+(?:\.\d+)?", value)
+            if not match:
+                return None
+            try:
+                return int(float(match.group(0)))
+            except (TypeError, ValueError):
+                return None
+
+        return None

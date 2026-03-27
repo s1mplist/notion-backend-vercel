@@ -18,6 +18,7 @@ class Plot(BaseModel):
     images: list[Image]
     additional_images: str | None
     assessment: str
+    dias_plantio: int | None = None
 
 
 class Report(BaseModel):

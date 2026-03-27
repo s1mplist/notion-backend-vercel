@@ -8,6 +8,12 @@
       <div class="info-label">Área</div>
       <div class="info-value">{{ plot.area }}ha</div>
     </div>
+    {% if plot.dias_plantio is not none %}
+    <div>
+      <div class="info-label">Dias do Plantio</div>
+      <div class="info-value badge badge-secondary">{{ plot.dias_plantio }}</div>
+    </div>
+    {% endif %}
     <div>
       <div class="info-label">Estádio Fenológico</div>
       <div class="info-value badge badge-secondary">{{ plot.growth_stage }}</div>
