@@ -138,10 +138,12 @@ class PlotDataExtractor:
                         item["name"] for item in estagio_data if item.get("name")
                     ]
 
-            assessment = []
+            assessment = ""
             if avaliacao_key:
                 avaliacao_data = properties[avaliacao_key].get("rich_text", [])
-                assessment = [item.get("plain_text", "") for item in avaliacao_data]
+                assessment = "".join(
+                    item.get("plain_text", "") for item in avaliacao_data
+                )
 
             talhao_names = [item["name"] for item in talhao_data if item.get("name")]
 
