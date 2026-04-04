@@ -95,6 +95,15 @@ body {
     text-transform: uppercase;
     letter-spacing: 0.5px;
     margin-bottom: 2px;
+    white-space: normal;
+    word-break: break-word;
+}
+
+.assessment-text {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    line-height: 1.5;
 }
 
 .info-value {
