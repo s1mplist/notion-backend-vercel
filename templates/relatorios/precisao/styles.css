@@ -1,0 +1,379 @@
+/* Variáveis CSS */
+:root {
+    --primary-color: #023948;
+    --secondary-color: #799C8F;
+    --text-color: #333;
+    --border-color: #e0e0e0;
+    --background-light: #dce1e2;
+    --accent-color: #f4faf6;
+    --spacing-unit: 1rem;
+    --spacing-half: 0.5rem;
+    --spacing-quarter: 0.25rem;
+    --border-radius: 6px;
+    --border-radius-lg: 8px;
+}
+
+/* Reset e estilos base */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    line-height: 1.5;
+    color: var(--text-color);
+    background-color: white;
+    padding: var(--spacing-unit);
+    font-size: 14px;
+}
+
+/* Configuração de página para PDF */
+@page {
+    size: 270mm 325mm;
+    margin: 1mm;
+}
+
+/* Pré-visualização em tela */
+@media screen {
+    html {
+        background: #f3f4f6;
+    }
+
+    body {
+        width: 270mm;
+        margin: 5mm auto;
+        background: white;
+        box-shadow: 0 0 0 1px #e5e7eb, 0 10px 30px rgba(0, 0, 0, 0.08);
+        overflow-x: hidden;
+    }
+
+    .gallery-image-wrapper {
+        min-height: 120px;
+    }
+}
+
+/* Cabeçalho */
+.header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 2rem;
+    width: 100%;
+}
+
+.header img {
+    width: 100%;
+    height: auto;
+    margin-bottom: var(--spacing-unit);
+}
+
+/* Grid de informações */
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--spacing-unit);
+    margin-bottom: 2rem;
+    width: 100%;
+}
+
+.info-item {
+    background: var(--background-light);
+    padding: var(--spacing-unit);
+    border-radius: var(--border-radius-lg);
+}
+
+.info-label {
+    font-weight: 600;
+    color: var(--primary-color);
+    font-size: 0.8em;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+    white-space: pre-line;
+}
+
+.assessment-text {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    line-height: 1.5;
+}
+
+.info-value {
+    color: var(--secondary-color);
+    font-weight: 500;
+    font-size: 0.95em;
+}
+
+/* Seções */
+.section {
+    margin-bottom: 2rem;
+}
+
+.section-title {
+    color: var(--primary-color);
+    font-size: 1.5em;
+    font-weight: 600;
+    margin-bottom: var(--spacing-unit);
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--primary-color);
+}
+
+/* Talhões */
+.talhao {
+    background: white;
+    border-radius: var(--border-radius-lg);
+    padding: var(--spacing-half);
+    margin-bottom: 0;
+    border: 1px solid var(--border-color);
+    page-break-inside: avoid;
+    break-inside: avoid;
+}
+
+.talhao-info {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--spacing-half);
+    background: var(--background-light);
+    padding: var(--spacing-half);
+    border-radius: var(--border-radius);
+    margin-bottom: var(--spacing-half);
+}
+
+/* Galeria de imagens */
+.images-and-assessment-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-half);
+}
+
+.image-gallery {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--spacing-quarter);
+    width: 100%;
+}
+
+.gallery-image-wrapper {
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--border-radius);
+    border: 1px solid var(--border-color);
+    background: #f9f9f9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 120px;
+}
+
+.gallery-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    display: block;
+}
+
+/* Avaliação */
+.avaliacao {
+    background: var(--background-light);
+    padding: var(--spacing-half);
+    border-radius: var(--border-radius);
+    margin-top: var(--spacing-half);
+}
+
+/* Cronograma */
+.schedule {
+    background: white;
+    border-radius: var(--border-radius-lg);
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+    margin: var(--spacing-unit) 0;
+}
+
+.schedule-item {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: var(--spacing-unit);
+    padding: var(--spacing-half) 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.schedule-item:last-child {
+    border-bottom: none;
+}
+
+.schedule-date {
+    font-weight: 500;
+    color: var(--primary-color);
+    white-space: nowrap;
+}
+
+/* Sumário Executivo */
+.executive-summary {
+    page-break-inside: avoid;
+    break-inside: avoid;
+}
+
+.summary-card {
+    background: white;
+    border-radius: var(--border-radius-lg);
+    border: 2px solid var(--primary-color);
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.summary-item {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.2rem;
+    padding-bottom: 1.2rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.summary-item:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.summary-icon {
+    font-size: 2em;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.summary-content {
+    flex: 1;
+}
+
+.summary-label {
+    font-weight: 600;
+    color: var(--primary-color);
+    font-size: 1.1em;
+    margin-bottom: 0.3rem;
+}
+
+.summary-text {
+    color: var(--text-color);
+    line-height: 1.5;
+    margin-bottom: 0.5rem;
+    white-space: pre-wrap;
+}
+
+.summary-schedule {
+    margin-top: 0.5rem;
+    padding-left: 1rem;
+    white-space: pre-wrap;
+}
+
+.summary-schedule ol,
+.summary-schedule ul {
+    margin: 0.5rem 0;
+    padding-left: 1.5rem;
+}
+
+.summary-schedule li {
+    margin-bottom: 0.3rem;
+    line-height: 1.5;
+}
+
+/* Footer */
+.footer {
+    text-align: center;
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+    color: var(--text-color);
+}
+
+.footer img {
+    max-width: 150px;
+    height: auto;
+    margin-bottom: var(--spacing-unit);
+}
+
+/* Utilitários */
+.text-center {
+    text-align: center;
+}
+
+.mb-1 {
+    margin-bottom: 0.4rem;
+}
+
+.mb-2 {
+    margin-bottom: 2rem;
+}
+
+.mt-1 {
+    margin-top: 0.4rem;
+}
+
+.mt-2 {
+    margin-top: 2rem;
+}
+
+/* Cards */
+.card {
+    background: white;
+    border-radius: var(--border-radius);
+    border: 1px solid var(--border-color);
+    padding: var(--spacing-half);
+    margin-bottom: var(--spacing-half);
+}
+
+.badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    font-weight: 500;
+}
+
+.badge-primary {
+    background: var(--primary-color);
+    color: white;
+}
+
+.badge-secondary {
+    background: var(--secondary-color);
+    color: white;
+}
+
+/* Print */
+@media print {
+    body {
+        width: auto;
+        padding: 4mm;
+        margin: 0;
+        box-shadow: none;
+        overflow: visible;
+    }
+
+    .talhao {
+        page-break-before: auto;
+        page-break-inside: avoid;
+        break-inside: avoid;
+        margin-bottom: var(--spacing-half);
+    }
+
+    .gallery-image-wrapper {
+        min-height: 150px;
+    }
+
+    .image-gallery {
+        gap: var(--spacing-quarter);
+    }
+
+    .images-and-assessment-group {
+        display: block;
+    }
+}
